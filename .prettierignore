@@ -1,0 +1,12 @@
+.next/
+node_modules/
+.venv/
+pnpm-lock.yaml
+packages/contracts/openapi.json
+
+# Architecture documentation is authored prose, not code. Prettier's markdown
+# rewriting (bullet style, table padding, emphasis characters) produces large
+# diffs that obscure genuine changes to an ADR, and accepted ADRs are meant to
+# be stable documents. Reformatting them is not a service.
+docs/
+*.md

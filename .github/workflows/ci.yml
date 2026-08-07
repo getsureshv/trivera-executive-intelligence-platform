@@ -1,0 +1,222 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '22'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fast lane. No infrastructure, so it fails a broken pull request in seconds.
+  # ---------------------------------------------------------------------------
+  python-static:
+    name: Python — format, lint, types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e "apps/api[postgres,dev]" -e apps/worker
+
+      - name: Format check (ruff)
+        run: ruff format --check apps/api apps/worker
+
+      - name: Lint (ruff)
+        run: ruff check apps/api apps/worker
+
+      - name: Type check (mypy --strict)
+        # Strict is mandatory (ADR-002 §1). Loosening it requires an ADR
+        # reference in the pull request.
+        run: |
+          cd apps/api && mypy
+          cd ../worker && mypy
+
+  python-tests:
+    name: Python — unit, integration, security
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local_dev_only
+          POSTGRES_DB: eip
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d eip"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      EIP_ENV: ci
+      EIP_LOG_FORMAT: json
+      EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@localhost:5432/eip
+      EIP_DB_PLATFORM_DSN: postgresql+asyncpg://eip_platform:local_dev_only@localhost:5432/eip
+      EIP_DB_MIGRATOR_DSN: postgresql+asyncpg://eip_migrator:local_dev_only@localhost:5432/eip
+      EIP_REDIS_URL: redis://localhost:6379/0
+      EIP_AUTH_DEV_SIGNING_SECRET: ci-only-not-a-real-secret-value-32-bytes
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e "apps/api[postgres,dev]" -e apps/worker
+
+      - name: Create database roles
+        # The three-role split is load-bearing: the runtime role must be
+        # NOBYPASSRLS and must not own the tables, or every isolation test
+        # would be vacuously true (ADR-003).
+        run: |
+          export PGPASSWORD=local_dev_only
+          psql -h localhost -U postgres -d eip -v ON_ERROR_STOP=1 \
+            -f infra/postgres/init/00-roles.sql
+
+      - name: Run migrations
+        working-directory: apps/api
+        run: alembic upgrade head
+
+      - name: Verify migrations are reversible
+        # A migration that cannot be rolled back is a migration that cannot be
+        # deployed safely.
+        working-directory: apps/api
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Verify no model drift
+        # An empty autogenerate diff proves the ORM models and the migrated
+        # schema agree. Drift here means production schema and code disagree.
+        working-directory: apps/api
+        run: |
+          alembic revision --autogenerate -m "drift check" --rev-id drift_check
+          if grep -qE "op\.(create|drop|alter|add)" migrations/versions/drift_check_*.py; then
+            echo "::error::Model drift detected — the ORM models and migrations disagree."
+            cat migrations/versions/drift_check_*.py
+            exit 1
+          fi
+          rm migrations/versions/drift_check_*.py
+
+      - name: Unit and architecture tests
+        working-directory: apps/api
+        run: pytest tests/unit tests/architecture -q
+
+      - name: Integration tests
+        working-directory: apps/api
+        run: pytest tests/integration -q
+
+      # -----------------------------------------------------------------------
+      # RELEASE-GATING. A failure here is a security defect, not a flake.
+      # Run as its own step so the failure is unmistakable in the job summary.
+      # -----------------------------------------------------------------------
+      - name: 'SECURITY: tenant isolation (release-gating)'
+        working-directory: apps/api
+        run: pytest tests/security -v -m security
+
+      - name: Worker tests
+        working-directory: apps/worker
+        run: pytest -q
+
+  web:
+    name: Web — lint, types, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm -r lint
+      - run: pnpm -r typecheck
+      - run: pnpm --filter @eip/web build
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reject committed .env files
+        # Only .env.example may be committed (guardrail 9, ADR-015).
+        run: |
+          if git ls-files | grep -E '^\.env$|^\.env\.(?!example)' ; then
+            echo "::error::A .env file is committed. Only .env.example may be."
+            exit 1
+          fi
+
+      - name: Scan for credential-shaped strings
+        run: |
+          set +e
+          PATTERN='(BEGIN (RSA|EC|OPENSSH|PGP) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36})'
+          MATCHES=$(git grep -nIE "$PATTERN" -- . ':!*.lock' ':!pnpm-lock.yaml')
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Possible secret committed:"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "No credential-shaped strings found."
+
+  # ---------------------------------------------------------------------------
+  # Proves the documented startup sequence actually works, which a unit test
+  # cannot: images build, migrations apply, and both services report healthy.
+  # ---------------------------------------------------------------------------
+  stack-smoke:
+    name: Local stack smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack
+        run: docker compose -f infra/docker-compose.yml --profile app up -d --build --wait
+
+      - name: API liveness and readiness
+        run: |
+          curl -fsS http://localhost:8000/health | tee /dev/stderr | grep -q '"status":"ok"'
+          curl -fsS http://localhost:8000/ready  | tee /dev/stderr | grep -q '"status":"ready"'
+
+      - name: Worker liveness and readiness
+        run: |
+          curl -fsS http://localhost:8001/health | grep -q '"status":"ok"'
+          curl -fsS http://localhost:8001/ready  | grep -q '"status":"ready"'
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml --profile app logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --profile app down -v

@@ -1,0 +1,143 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eip-api"
+version = "0.1.0"
+description = "TriVera Executive Intelligence Platform — API (modular monolith)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    # Plain uvicorn, not uvicorn[standard]: the extras pull httptools and
+    # uvloop, which are C extensions without wheels on some platforms
+    # (notably Windows/ARM64) and buy nothing at our request volumes.
+    "uvicorn>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14",
+    "pyjwt[crypto]>=2.10",
+    "structlog>=24.4",
+    "httpx>=0.28",
+    # ADR-014: OpenTelemetry, vendor-neutral, exporting via a collector.
+    # The HTTP/protobuf exporter is preferred over gRPC: it is pure Python
+    # (no grpcio build), and it traverses corporate proxies that gRPC does not.
+    # Disabled by default (EIP_OTEL_ENABLED=false) so local development needs
+    # no collector.
+    "opentelemetry-api>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.49b0",
+]
+
+[project.optional-dependencies]
+# The PostgreSQL driver is a C extension. It is a hard runtime requirement —
+# the container image and CI both install `.[postgres,dev]` — but it is an
+# extra so that lint/typecheck/unit-test tooling can be installed on a
+# developer machine that lacks a compiler toolchain (see README, "Windows on
+# ARM64"). Nothing in `eip` imports asyncpg directly; SQLAlchemy resolves it
+# from the DSN, so type checking is unaffected by its absence.
+postgres = ["asyncpg>=0.30"]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "mypy>=1.13",
+    "ruff>=0.8",
+]
+# NOTE: ADR-001's bounded-context import contracts are enforced by
+# `tests/architecture/test_module_boundaries.py`, a dependency-free AST check,
+# rather than by import-linter. Reason: import-linter's `grimp` backend is a
+# compiled extension without wheels on some platforms, and a boundary check
+# that cannot run on a developer's machine is a boundary check that rots.
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eip"]
+# PEP 561: ships src/eip/py.typed so downstream packages (the worker) can
+# type-check against this package instead of treating it as untyped.
+artifacts = ["src/eip/py.typed"]
+
+# ---------------------------------------------------------------------------
+# Ruff — formatting and linting.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # isort
+    "N",           # pep8-naming
+    "UP",          # pyupgrade
+    "B",           # bugbear
+    "A",           # builtin shadowing
+    "C4",          # comprehensions
+    "DTZ",         # timezone-aware datetimes (audit correctness)
+    "T20",         # no print()
+    "SIM",         # simplify
+    "RUF",
+    "ASYNC",       # async correctness
+    "S",           # bandit security rules
+]
+ignore = [
+    "S101",  # assert: used deliberately in startup invariants and tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may hardcode local-only credentials and use asserts freely.
+"tests/**" = ["S105", "S106", "S107"]
+# Alembic templates are generated.
+"migrations/versions/*" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["eip"]
+
+# ---------------------------------------------------------------------------
+# mypy — strict, non-negotiable (ADR-002 §1).
+#
+# The metric compiler and semantic model are metadata-driven; Python's
+# dynamism is a liability there and is bought back deliberately. Loosening
+# any of this requires an ADR reference in the pull request.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_unused_configs = true
+disallow_any_unimported = true
+disallow_any_generics = true
+disallow_untyped_defs = true
+no_implicit_reexport = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+packages = ["eip"]
+
+[[tool.mypy.overrides]]
+# These ship without complete stubs.
+module = ["opentelemetry.*", "structlog.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "integration: requires a live PostgreSQL (deselect with -m 'not integration')",
+    "security: RELEASE-GATING tenant-isolation and authorization tests",
+]
+filterwarnings = ["error::DeprecationWarning"]

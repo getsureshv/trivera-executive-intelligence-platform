@@ -1,0 +1,7 @@
+# Workspace layout per ADR-001.
+#
+# `apps/api` and `apps/worker` are Python and are deliberately absent: the
+# repository is polyglot, and pnpm only manages the TypeScript half.
+packages:
+  - 'apps/web'
+  - 'packages/*'

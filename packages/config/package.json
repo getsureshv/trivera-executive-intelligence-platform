@@ -1,0 +1,14 @@
+{
+  "name": "@eip/config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript and lint configuration (ADR-001)",
+  "files": [
+    "tsconfig.base.json"
+  ],
+  "scripts": {
+    "lint": "echo \"@eip/config: nothing to lint\"",
+    "typecheck": "echo \"@eip/config: nothing to typecheck\"",
+    "test": "echo \"@eip/config: no tests\""
+  }
+}

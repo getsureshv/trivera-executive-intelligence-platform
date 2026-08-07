@@ -1,0 +1,22 @@
+{
+  "name": "trivera-eip",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TriVera Executive Intelligence Platform — monorepo root (ADR-001)",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @eip/web dev",
+    "build": "pnpm --filter @eip/web build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2"
+  }
+}

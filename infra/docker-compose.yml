@@ -1,0 +1,169 @@
+# Local development environment for TriVera EIP.
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# Brings up PostgreSQL, Redis, the migration job, the API, and the worker.
+# The frontend runs on the host (`pnpm dev` in apps/web) because Next.js's
+# dev loop is materially faster outside a container and it needs no native
+# dependencies.
+#
+# Profiles:
+#   (default)          infrastructure only — postgres + redis
+#   --profile app      infrastructure + migrate + api + worker
+#
+# Containerising the Python services is not incidental: asyncpg is a C
+# extension with no wheel on some developer platforms (Windows/ARM64 among
+# them), so the container is what makes the environment genuinely
+# reproducible rather than "works if you have a compiler".
+
+name: trivera-eip
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: eip-postgres
+    environment:
+      # Local development only. Never a real credential (ADR-015).
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: local_dev_only
+      POSTGRES_DB: eip
+      # Deterministic collation so ordering is identical across machines.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      - '5432:5432'
+    volumes:
+      - eip_pgdata:/var/lib/postgresql/data
+      # Runs once, on an empty data directory, in filename order.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    command:
+      # Surfaces the tenant/metric/plan tags the governed query path will
+      # attach later (ADR-007 §5, ADR-014 §7).
+      - 'postgres'
+      - '-c'
+      - 'shared_preload_libraries=pg_stat_statements'
+      - '-c'
+      - 'log_min_duration_statement=500'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d eip']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: eip-redis
+    ports:
+      # Published on 6380 by default. 6379 collides with a stray local Redis
+      # often enough that defaulting to it costs more time than it saves.
+      # Override with EIP_REDIS_HOST_PORT and keep EIP_REDIS_URL in sync.
+      - '${EIP_REDIS_HOST_PORT:-6380}:6379'
+    # Cache + broker duty are logically separated by database index
+    # (ADR-009 Consequences). No persistence: Redis is never the system of
+    # record — durable state lives in PostgreSQL.
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # --- application services (profile: app) --------------------------------
+
+  migrate:
+    profiles: ['app']
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+      target: migrate
+    environment:
+      # Runs as the migrator — the only role with DDL rights (guardrail 17).
+      EIP_DB_MIGRATOR_DSN: postgresql+asyncpg://eip_migrator:local_dev_only@postgres:5432/eip
+      EIP_ENV: local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    profiles: ['app']
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+      target: api
+    environment:
+      EIP_ENV: local
+      EIP_LOG_FORMAT: console
+      EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@postgres:5432/eip
+      EIP_DB_PLATFORM_DSN: postgresql+asyncpg://eip_platform:local_dev_only@postgres:5432/eip
+      EIP_DB_MIGRATOR_DSN: postgresql+asyncpg://eip_migrator:local_dev_only@postgres:5432/eip
+      EIP_REDIS_URL: redis://redis:6379/0
+      EIP_CORS_ORIGINS: http://localhost:3000
+      EIP_AUTH_DEV_SIGNING_SECRET: local-dev-only-not-a-real-secret-change-me
+    ports:
+      - '${EIP_API_HOST_PORT:-8000}:8000'
+    volumes:
+      # Bind-mounted for reload; the image already contains a copy.
+      - ../apps/api/src:/app/apps/api/src:ro
+      - ../apps/api/migrations:/app/apps/api/migrations:ro
+      # Mounted so the integration and security suites can be run in the
+      # container without a rebuild:
+      #   docker compose -f infra/docker-compose.yml --profile app \
+      #     run --rm api python -m pytest tests -q
+      - ../apps/api/tests:/app/apps/api/tests:ro
+      - ../apps/api/pyproject.toml:/app/apps/api/pyproject.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - 'CMD'
+        - 'python'
+        - '-c'
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  worker:
+    profiles: ['app']
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+      target: worker
+    environment:
+      EIP_ENV: local
+      EIP_LOG_FORMAT: console
+      EIP_SERVICE_NAME: eip-worker
+      EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@postgres:5432/eip
+      EIP_DB_PLATFORM_DSN: postgresql+asyncpg://eip_platform:local_dev_only@postgres:5432/eip
+      EIP_REDIS_URL: redis://redis:6379/0
+    ports:
+      - '${EIP_WORKER_HOST_PORT:-8001}:8001'
+    volumes:
+      - ../apps/api/src:/app/apps/api/src:ro
+      - ../apps/worker/src:/app/apps/worker/src:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - 'CMD'
+        - 'python'
+        - '-c'
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health', timeout=3).status==200 else 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  eip_pgdata:
+    name: eip_pgdata

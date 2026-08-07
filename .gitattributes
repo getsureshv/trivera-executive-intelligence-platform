@@ -1,0 +1,30 @@
+# Normalize line endings.
+#
+# Without this, a Windows checkout commits CRLF and CI (Linux) sees the whole
+# file as changed. Worse, shell scripts and the PostgreSQL init SQL run inside
+# Linux containers, where a CRLF line ending is a syntax error rather than a
+# cosmetic difference.
+
+* text=auto eol=lf
+
+# Files that must be LF regardless of platform — they execute in containers.
+*.sh          text eol=lf
+*.sql         text eol=lf
+Dockerfile    text eol=lf
+*.Dockerfile  text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+
+# Binary: never touch.
+*.png  binary
+*.jpg  binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
+
+# Generated; keep out of diffs and language statistics.
+pnpm-lock.yaml               linguist-generated=true -diff
+packages/contracts/openapi.json linguist-generated=true

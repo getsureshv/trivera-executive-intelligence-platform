@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eip-worker"
+version = "0.1.0"
+description = "TriVera Executive Intelligence Platform — background worker"
+requires-python = ">=3.12"
+dependencies = [
+    # ADR-001: the worker imports the api package rather than duplicating the
+    # domain. Installed editable from ../api during development.
+    "eip-api",
+    # ADR-009: Dramatiq is the task executor, chosen over Celery. The decision
+    # that matters is that pipeline state lives in PostgreSQL, which makes the
+    # broker a small, replaceable component.
+    "dramatiq[redis]>=1.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "mypy>=1.13",
+    "ruff>=0.8",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eip_worker"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "A", "C4", "DTZ", "T20", "SIM", "RUF", "ASYNC", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S107"]
+
+[tool.ruff.lint.isort]
+# `eip` is the sibling application package, not a third-party dependency
+# (ADR-001: the worker imports the api package rather than duplicating it).
+known-first-party = ["eip", "eip_worker"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+disallow_any_unimported = true
+show_error_codes = true
+mypy_path = "src"
+packages = ["eip_worker"]
+
+[[tool.mypy.overrides]]
+module = ["dramatiq.*", "structlog.*", "redis.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requires a live PostgreSQL",
+]
