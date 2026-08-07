@@ -25,39 +25,10 @@ import type {
   ReadinessResponse,
 } from '@eip/contracts';
 
+import { ApiError } from './errors';
 import { getAccessToken } from './session';
 
 const API_BASE_URL = process.env.EIP_API_BASE_URL ?? 'http://localhost:8000';
-
-/** An API failure carrying the server's problem document. */
-export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly problem: ProblemDocument | null,
-  ) {
-    super(problem?.detail ?? `Request failed with status ${status}`);
-    this.name = 'ApiError';
-  }
-
-  /**
-   * The id to quote when reporting a problem.
-   *
-   * The server deliberately keeps error detail on its side (ADR-014 §6), so
-   * this is genuinely the most useful thing the UI can show — and much better
-   * than a guessed explanation.
-   */
-  get correlationId(): string | null {
-    return this.problem?.correlation_id ?? null;
-  }
-
-  get isUnauthenticated(): boolean {
-    return this.status === 401;
-  }
-
-  get isForbidden(): boolean {
-    return this.status === 403;
-  }
-}
 
 interface RequestOptions {
   /** Send the caller's bearer token. Off for unauthenticated probes. */
@@ -141,4 +112,4 @@ export function fetchAuditEvents(limit = 20): Promise<AuditEvent[]> {
   return request<AuditEvent[]>(`/v1/audit-events?limit=${limit}`);
 }
 
-export { API_BASE_URL };
+export { API_BASE_URL, ApiError };

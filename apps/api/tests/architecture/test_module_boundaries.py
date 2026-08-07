@@ -22,6 +22,7 @@ The contracts:
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -158,3 +159,28 @@ def test_contexts_do_not_import_api_internals(context: str) -> None:
         if module.startswith("eip.api")
     ]
     assert not violations, f"'{context}' must not import eip.api:\n  " + "\n  ".join(violations)
+
+
+def test_set_role_is_executed_in_exactly_one_module() -> None:
+    """Analytical isolation rests entirely on the role a transaction assumes.
+
+    ``eip_app`` is a member of every per-tenant role, so it *can* assume any of
+    them; what makes that safe is that exactly one function ever issues the
+    switch, and that function validates the handle against the request's tenant
+    context (ADR-003 §2, ADR-016). A second call site would reintroduce the
+    residual risk this design deliberately confines to one reviewable place.
+
+    The pattern matches the *executable* form — ``SET [LOCAL] ROLE "`` — because
+    the identifier is always quoted when interpolated. Prose in docstrings
+    discusses ``SET LOCAL ROLE`` freely and must not trip the check; a test that
+    flagged documentation would be abandoned within a week.
+    """
+    executable = re.compile(r'SET\s+(?:LOCAL\s+)?ROLE\s+"')
+    offenders = sorted(
+        str(path.relative_to(SRC)).replace("\\", "/")
+        for path in _iter_modules()
+        if executable.search(path.read_text(encoding="utf-8"))
+    )
+    assert offenders == ["dataplane/session.py"], (
+        "SET ROLE must be executed only in eip.dataplane.session; found in: " + ", ".join(offenders)
+    )

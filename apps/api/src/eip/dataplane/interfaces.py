@@ -64,6 +64,11 @@ class DataPlaneHandle:
     safely-quoted identifier. Under a future database-per-tenant mode the same
     call would return an unqualified name against a different connection, and
     no caller would change.
+
+    A handle is also the **only** carrier of the database role an analytical
+    transaction may assume. It is constructed from a ``TenantRef`` that came
+    from an authenticated membership, so there is no path from request input to
+    a role name (ADR-003).
     """
 
     tenant_id: uuid.UUID
@@ -71,6 +76,11 @@ class DataPlaneHandle:
     #: Backend-specific location: a schema name today; a database or catalog
     #: under other modes. Callers must treat this as opaque and use qualify().
     namespace: str
+    #: The database role that holds privileges on ``namespace`` and on nothing
+    #: else. ``eip.platform.db.analytical_session`` assumes it for the duration
+    #: of one transaction. Empty only for modes where role switching does not
+    #: apply.
+    role: str = ""
 
     def qualify(self, object_name: str) -> str:
         """Return a fully-qualified, quoted identifier for ``object_name``."""

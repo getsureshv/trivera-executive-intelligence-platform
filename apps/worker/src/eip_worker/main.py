@@ -28,10 +28,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+# Registers every ORM mapper. The relay writes audit events, and AuditEvent's
+# foreign key cannot resolve unless the identity models are loaded too.
+import eip.models  # noqa: F401
 from eip.platform.db import (
     assert_rls_covers_tenant_tables,
     assert_runtime_role_is_constrained,
-    create_engines,
+    create_app_engine,
     create_session_factory,
 )
 from eip.platform.logging import configure_logging, get_logger
@@ -48,9 +51,13 @@ class Worker:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._engines = create_engines(settings)
-        self._app_factory = create_session_factory(self._engines.app)
-        self._platform_factory = create_session_factory(self._engines.platform)
+        # `create_app_engine`, not `create_engines`: the worker never builds a
+        # platform engine, so it is structurally incapable of opening a
+        # BYPASSRLS connection (ADR-009; Phase 1A finding 3). Tenant
+        # enumeration goes through eip_outbox_pending_tenants(), a SECURITY
+        # DEFINER function returning only identifiers.
+        self._engine = create_app_engine(settings)
+        self._app_factory = create_session_factory(self._engine)
         self._stopping = asyncio.Event()
         self._db_ready = False
         self._broker_ready = False
@@ -66,8 +73,8 @@ class Worker:
         deliberate: the worker connects with its own engine and could, through
         a configuration mistake, be handed a more privileged role than the API.
         """
-        await assert_runtime_role_is_constrained(self._engines.app)
-        await assert_rls_covers_tenant_tables(self._engines.app)
+        await assert_runtime_role_is_constrained(self._engine)
+        await assert_rls_covers_tenant_tables(self._engine)
         self._db_ready = True
 
         self._broker_ready = await check_broker(self._settings)
@@ -85,9 +92,7 @@ class Worker:
 
         while not self._stopping.is_set():
             try:
-                published = await relay_once(
-                    self._app_factory, self._platform_factory, batch_size=batch
-                )
+                published = await relay_once(self._app_factory, batch_size=batch)
             except Exception:
                 _log.exception("worker.relay_failed")
                 self._db_ready = False
@@ -103,8 +108,7 @@ class Worker:
         self._stopping.set()
 
     async def close(self) -> None:
-        await self._engines.app.dispose()
-        await self._engines.platform.dispose()
+        await self._engine.dispose()
 
 
 def build_health_app(worker: Worker) -> Starlette:

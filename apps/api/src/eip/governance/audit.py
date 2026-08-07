@@ -8,11 +8,17 @@ describes commit together or not at all. This is why audit is a database table
 and not a log stream: log pipelines drop records under load, and an audit trail
 that drops records is not an audit trail.
 
-**Tamper evidence.** Each tenant's events form a hash chain. ``hash`` covers the
-row's canonical content plus ``prev_hash``, so removing or editing any row makes
-every subsequent hash fail to reproduce. Combined with the revocation of
-``UPDATE``/``DELETE`` from the application role (migration 0001), modification
-requires database-superuser access *and* is still detectable.
+**Tamper evidence.** Each tenant's events form a hash chain over *every*
+immutable field, anchored by a checkpoint (``audit_chain_head``) that no runtime
+or platform role may write. Together these detect mutation, interior deletion,
+tail deletion, truncation to a prefix, and total erasure — see ``verify_chain``
+for the exact matrix and for the one blind spot that remains.
+
+Note what changed and why: the first implementation hashed only a subset of
+columns and had no checkpoint, so ``occurred_at``, ``actor_type``, ``trace_id``,
+and ``request_id`` could be rewritten undetected, and deleting the tail or the
+whole chain left a perfectly valid remainder. The guarantee documented at the
+time was therefore stronger than the implementation.
 
 Sequence allocation is serialised per tenant with a transaction-scoped advisory
 lock. Without it, two concurrent writers could read the same ``prev_hash`` and
@@ -25,6 +31,9 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Final
 
 from sqlalchemy import func, select, text
@@ -54,7 +63,7 @@ class AuditAction:
     # authentication / session
     SIGN_IN_SUCCEEDED = "auth.sign_in.succeeded"
     SIGN_IN_FAILED = "auth.sign_in.failed"
-    TOKEN_ISSUED = "auth.token.issued"  # noqa: S105 - an action name, not a credential  # noqa: S105 - an action name, not a credential
+    TOKEN_ISSUED = "auth.token.issued"  # noqa: S105 - an action name, not a credential
 
     # tenant context / access
     TENANT_CONTEXT_ESTABLISHED = "tenant.context.established"
@@ -66,6 +75,9 @@ class AuditAction:
     TENANT_DEPROVISIONED = "tenant.deprovisioned"
     MEMBERSHIP_GRANTED = "membership.granted"
     MEMBERSHIP_REVOKED = "membership.revoked"
+
+    # background processing (ADR-009)
+    OUTBOX_RELAYED = "outbox.relayed"
 
     # privileged access (ADR-010 §5)
     PLATFORM_ELEVATION_USED = "platform.elevation.used"
@@ -81,24 +93,46 @@ def compute_hash(
     prev_hash: str,
     tenant_id: uuid.UUID,
     seq: int,
+    occurred_at: datetime,
+    actor_type: str,
+    actor_user_id: uuid.UUID | None,
     action: str,
     resource_type: str,
     resource_id: str | None,
-    actor_user_id: uuid.UUID | None,
     outcome: str,
+    trace_id: str,
+    request_id: str,
     detail: dict[str, Any],
 ) -> str:
-    """Compute a chain hash. Pure, so it can be re-derived during verification."""
+    """Compute a chain hash over **every immutable field** of the event.
+
+    The original implementation covered only a subset, leaving ``occurred_at``,
+    ``actor_type``, ``trace_id``, and ``request_id`` outside the digest — so
+    those columns could be rewritten and the chain would still verify. Backdating
+    an event or reattributing it from ``user`` to ``system`` is exactly the kind
+    of alteration an audit trail exists to detect, so they are covered now.
+
+    ``occurred_at`` is normalised to UTC and serialised at microsecond
+    resolution, matching what PostgreSQL stores in a ``timestamptz``. Without
+    that normalisation, verification would fail spuriously whenever the reading
+    session's timezone differed from the writing session's.
+
+    Pure, so it can be re-derived during verification.
+    """
     body = _canonical(
         {
             "prev": prev_hash,
             "tenant_id": str(tenant_id),
             "seq": seq,
+            "occurred_at": occurred_at.astimezone(UTC).isoformat(timespec="microseconds"),
+            "actor_type": actor_type,
+            "actor_user_id": str(actor_user_id) if actor_user_id else None,
             "action": action,
             "resource_type": resource_type,
             "resource_id": resource_id,
-            "actor_user_id": str(actor_user_id) if actor_user_id else None,
             "outcome": outcome,
+            "trace_id": trace_id,
+            "request_id": request_id,
             "detail": detail,
         }
     )
@@ -150,10 +184,18 @@ async def record(
     seq = (previous.seq + 1) if previous else 1
     prev_hash = previous.hash if previous else GENESIS_HASH
 
+    # Set explicitly rather than leaving it to the column's server default:
+    # `occurred_at` is inside the digest, so the value hashed must be exactly
+    # the value stored. A server default would be assigned after the hash was
+    # computed and every event would fail verification.
+    occurred_at = datetime.now(UTC)
+    actor_type = context.principal.actor_type.value
+
     event = AuditEvent(
         tenant_id=context.tenant_id,
         seq=seq,
-        actor_type=context.principal.actor_type.value,
+        occurred_at=occurred_at,
+        actor_type=actor_type,
         actor_user_id=context.principal.user_id,
         action=action,
         resource_type=resource_type,
@@ -167,11 +209,15 @@ async def record(
             prev_hash=prev_hash,
             tenant_id=context.tenant_id,
             seq=seq,
+            occurred_at=occurred_at,
+            actor_type=actor_type,
+            actor_user_id=context.principal.user_id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,
-            actor_user_id=context.principal.user_id,
             outcome=outcome,
+            trace_id=context.trace_id,
+            request_id=context.request_id,
             detail=safe_detail,
         ),
     )
@@ -227,40 +273,174 @@ async def record_platform_action(
     )
 
 
-async def verify_chain(session: AsyncSession, tenant_id: uuid.UUID) -> tuple[bool, int | None]:
-    """Re-derive a tenant's hash chain.
+class ChainStatus(StrEnum):
+    """Outcome of a chain verification."""
 
-    Returns ``(ok, first_bad_seq)``. Run periodically as a job and after any
-    suspected incident; a broken chain is a high-severity finding.
+    INTACT = "intact"
+    #: No events and no checkpoint — a tenant that has never been audited.
+    EMPTY = "empty"
+    #: The tenant was offboarded; its events were erased by the sanctioned path.
+    OFFBOARDED = "offboarded"
+    #: An event's content no longer reproduces its hash.
+    MUTATED = "mutated"
+    #: A sequence gap: an event was removed from inside the chain.
+    GAP = "gap"
+    #: Surviving events are internally valid but stop short of the checkpoint —
+    #: the tail was deleted, or the chain was truncated to an earlier prefix.
+    TRUNCATED = "truncated"
+    #: Every event is gone but the checkpoint proves they existed.
+    ERASED = "erased"
+    #: Events exist beyond the checkpoint, which the trigger should make
+    #: impossible — the checkpoint itself was tampered with, or the trigger was
+    #: disabled.
+    CHECKPOINT_MISSING = "checkpoint_missing"
+
+
+@dataclass(frozen=True, slots=True)
+class ChainVerification:
+    """The result of verifying one tenant's audit chain."""
+
+    status: ChainStatus
+    #: Sequence number where the problem was detected, where applicable.
+    at_seq: int | None = None
+    detail: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.status in (ChainStatus.INTACT, ChainStatus.EMPTY, ChainStatus.OFFBOARDED)
+
+
+async def verify_chain(session: AsyncSession, tenant_id: uuid.UUID) -> ChainVerification:
+    """Re-derive a tenant's hash chain and compare it against the checkpoint.
+
+    The hash chain alone detects *mutation* and *middle* deletion: altering or
+    removing an interior event breaks the links that follow it. It cannot detect
+    deletion of the **final** event, truncation to an earlier prefix, or deletion
+    of the **entire** chain, because in each case the survivors form a perfectly
+    valid chain — and an empty chain is trivially valid.
+
+    ``audit_chain_head`` closes that gap. It records the highest sequence and
+    hash ever written, is maintained by a ``SECURITY DEFINER`` trigger, and is
+    writable by no runtime or platform role (migration 0002). Comparing the
+    surviving chain against it turns all three cases into detections:
+
+    ==========================  ==========================================
+    Tampering                   Detected as
+    ==========================  ==========================================
+    field mutated               ``MUTATED``   (hash no longer reproduces)
+    interior event deleted      ``GAP``       (sequence gap)
+    final event deleted         ``TRUNCATED`` (max seq < checkpoint)
+    truncated to prefix         ``TRUNCATED``
+    all events deleted          ``ERASED``    (checkpoint survives)
+    tenant offboarded           ``OFFBOARDED``(sanctioned; checkpoint marked)
+    ==========================  ==========================================
+
+    The remaining blind spot is stated honestly: an attacker holding
+    **database-owner or superuser** credentials can drop the trigger, rewrite the
+    checkpoint, and reconstruct a consistent chain. Detecting that requires
+    exporting checkpoints to storage outside this database, which Phase 1A does
+    not do. The guarantee is therefore: *tampering by any application or
+    platform role is detectable; tampering by a database owner is not.*
     """
-    events = (
+    head = (
         await session.execute(
-            select(AuditEvent).where(AuditEvent.tenant_id == tenant_id).order_by(AuditEvent.seq)
+            text(
+                "SELECT last_seq, last_hash, offboarded_at FROM audit_chain_head "
+                "WHERE tenant_id = :tenant_id"
+            ),
+            {"tenant_id": tenant_id},
         )
-    ).scalars()
+    ).one_or_none()
+
+    events = list(
+        (
+            await session.execute(
+                select(AuditEvent).where(AuditEvent.tenant_id == tenant_id).order_by(AuditEvent.seq)
+            )
+        ).scalars()
+    )
+
+    if head is None:
+        if not events:
+            return ChainVerification(ChainStatus.EMPTY)
+        # Events without a checkpoint means the trigger never fired for them.
+        return ChainVerification(
+            ChainStatus.CHECKPOINT_MISSING,
+            at_seq=events[0].seq,
+            detail="audit events exist but no chain checkpoint was recorded",
+        )
+
+    if head.offboarded_at is not None and not events:
+        return ChainVerification(
+            ChainStatus.OFFBOARDED,
+            detail=f"tenant offboarded; {head.last_seq} events erased by the sanctioned path",
+        )
+
+    if not events:
+        return ChainVerification(
+            ChainStatus.ERASED,
+            detail=(
+                f"checkpoint records {head.last_seq} events but none survive; the chain was deleted"
+            ),
+        )
 
     expected_prev = GENESIS_HASH
     expected_seq = 1
     for event in events:
-        if event.seq != expected_seq or event.prev_hash != expected_prev:
-            return False, event.seq
+        if event.seq != expected_seq:
+            return ChainVerification(
+                ChainStatus.GAP,
+                at_seq=event.seq,
+                detail=f"expected sequence {expected_seq}, found {event.seq}",
+            )
+        if event.prev_hash != expected_prev:
+            return ChainVerification(
+                ChainStatus.MUTATED,
+                at_seq=event.seq,
+                detail="predecessor hash does not match",
+            )
         recomputed = compute_hash(
             prev_hash=event.prev_hash,
             tenant_id=event.tenant_id,
             seq=event.seq,
+            occurred_at=event.occurred_at,
+            actor_type=event.actor_type,
+            actor_user_id=event.actor_user_id,
             action=event.action,
             resource_type=event.resource_type,
             resource_id=event.resource_id,
-            actor_user_id=event.actor_user_id,
             outcome=event.outcome,
+            trace_id=event.trace_id,
+            request_id=event.request_id,
             detail=event.detail,
         )
         if recomputed != event.hash:
-            return False, event.seq
+            return ChainVerification(
+                ChainStatus.MUTATED,
+                at_seq=event.seq,
+                detail="event content no longer reproduces its hash",
+            )
         expected_prev = event.hash
         expected_seq += 1
 
-    return True, None
+    last = events[-1]
+    if last.seq < head.last_seq:
+        return ChainVerification(
+            ChainStatus.TRUNCATED,
+            at_seq=last.seq,
+            detail=(
+                f"checkpoint records sequence {head.last_seq} but the chain ends at "
+                f"{last.seq}; {head.last_seq - last.seq} event(s) were deleted"
+            ),
+        )
+    if last.seq > head.last_seq or last.hash != head.last_hash:
+        return ChainVerification(
+            ChainStatus.CHECKPOINT_MISSING,
+            at_seq=last.seq,
+            detail="the chain does not match its checkpoint; the checkpoint was altered",
+        )
+
+    return ChainVerification(ChainStatus.INTACT, at_seq=last.seq)
 
 
 async def count_events(session: AsyncSession, tenant_id: uuid.UUID) -> int:
@@ -274,6 +454,8 @@ __all__ = [
     "GENESIS_HASH",
     "ActorType",
     "AuditAction",
+    "ChainStatus",
+    "ChainVerification",
     "compute_hash",
     "count_events",
     "record",

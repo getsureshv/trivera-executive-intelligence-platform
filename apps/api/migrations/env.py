@@ -18,9 +18,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-# Importing the models registers them on Base.metadata for autogenerate.
-from eip.governance import models as _governance_models  # noqa: F401
-from eip.identity import models as _identity_models  # noqa: F401
+# Importing the registry registers every mapper on Base.metadata, which
+# autogenerate needs in order to diff the full schema.
+import eip.models  # noqa: F401
 from eip.platform.db import Base
 from eip.platform.settings import get_settings
 

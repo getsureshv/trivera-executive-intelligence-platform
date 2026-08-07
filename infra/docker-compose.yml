@@ -139,7 +139,10 @@ services:
       EIP_LOG_FORMAT: console
       EIP_SERVICE_NAME: eip-worker
       EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@postgres:5432/eip
-      EIP_DB_PLATFORM_DSN: postgresql+asyncpg://eip_platform:local_dev_only@postgres:5432/eip
+      # NOTE: EIP_DB_PLATFORM_DSN is deliberately NOT supplied to the worker.
+      # An ordinary worker must not hold a reusable BYPASSRLS credential
+      # (ADR-009; Phase 1A finding 3). It reaches cross-tenant information only
+      # through eip_outbox_pending_tenants(), which returns identifiers alone.
       EIP_REDIS_URL: redis://redis:6379/0
     ports:
       - '${EIP_WORKER_HOST_PORT:-8001}:8001'

@@ -44,8 +44,12 @@ jobs:
           cd apps/api && mypy
           cd ../worker && mypy
 
+  # ---------------------------------------------------------------------------
+  # Database-backed suites. Every release-gating security check runs here, each
+  # as its own step so a failure names the guarantee it broke.
+  # ---------------------------------------------------------------------------
   python-tests:
-    name: Python — unit, integration, security
+    name: Python — migrations, unit, integration, security
     runs-on: ubuntu-latest
 
     services:
@@ -90,9 +94,9 @@ jobs:
         run: pip install -e "apps/api[postgres,dev]" -e apps/worker
 
       - name: Create database roles
-        # The three-role split is load-bearing: the runtime role must be
-        # NOBYPASSRLS and must not own the tables, or every isolation test
-        # would be vacuously true (ADR-003).
+        # The role split is load-bearing. eip_app must be NOINHERIT and
+        # NOBYPASSRLS, or the analytical-isolation suite would pass vacuously
+        # (ADR-003 §2).
         run: |
           export PGPASSWORD=local_dev_only
           psql -h localhost -U postgres -d eip -v ON_ERROR_STOP=1 \
@@ -103,8 +107,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Verify migrations are reversible
-        # A migration that cannot be rolled back is a migration that cannot be
-        # deployed safely.
+        # A migration that cannot be rolled back cannot be deployed safely.
         working-directory: apps/api
         run: |
           alembic downgrade base
@@ -112,7 +115,7 @@ jobs:
 
       - name: Verify no model drift
         # An empty autogenerate diff proves the ORM models and the migrated
-        # schema agree. Drift here means production schema and code disagree.
+        # schema agree. Drift means production schema and code disagree.
         working-directory: apps/api
         run: |
           alembic revision --autogenerate -m "drift check" --rev-id drift_check
@@ -132,19 +135,39 @@ jobs:
         run: pytest tests/integration -q
 
       # -----------------------------------------------------------------------
-      # RELEASE-GATING. A failure here is a security defect, not a flake.
-      # Run as its own step so the failure is unmistakable in the job summary.
+      # RELEASE-GATING. A failure in any step below is a security defect, not a
+      # flake. Split by guarantee so the job summary names what broke.
       # -----------------------------------------------------------------------
-      - name: 'SECURITY: tenant isolation (release-gating)'
+      - name: 'SECURITY: control-plane tenant isolation'
         working-directory: apps/api
-        run: pytest tests/security -v -m security
+        run: pytest tests/security/test_tenant_isolation.py -v
 
-      - name: Worker tests
+      - name: 'SECURITY: analytical data-plane isolation'
+        working-directory: apps/api
+        run: pytest tests/security/test_analytical_isolation.py -v
+
+      - name: 'SECURITY: audit tamper evidence'
+        working-directory: apps/api
+        run: pytest tests/security/test_audit_tamper_evidence.py -v
+
+      - name: 'SECURITY: production token verification'
+        working-directory: apps/api
+        run: pytest tests/security/test_oidc_verification.py -v
+
+      - name: 'SECURITY: privileged platform access'
+        working-directory: apps/api
+        run: pytest tests/security/test_privileged_platform_access.py -v
+
+      - name: 'SECURITY: audit integrity and authorization'
+        working-directory: apps/api
+        run: pytest tests/security/test_audit_and_authorization.py -v
+
+      - name: 'SECURITY: worker privileges and background isolation'
         working-directory: apps/worker
-        run: pytest -q
+        run: pytest -v
 
   web:
-    name: Web — lint, types, build
+    name: Web — lint, types, tests, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,6 +183,7 @@ jobs:
       - run: pnpm format:check
       - run: pnpm -r lint
       - run: pnpm -r typecheck
+      - run: pnpm -r test
       - run: pnpm --filter @eip/web build
 
   secret-scan:
@@ -170,18 +194,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reject committed .env files
-        # Only .env.example may be committed (guardrail 9, ADR-015).
-        run: |
-          if git ls-files | grep -E '^\.env$|^\.env\.(?!example)' ; then
-            echo "::error::A .env file is committed. Only .env.example may be."
-            exit 1
-          fi
+      - name: Test the environment-file check
+        # The check itself is tested. The previous implementation used a PCRE
+        # negative lookahead with `grep -E`, which POSIX ERE does not support,
+        # so `.env.production` passed silently. A guard nobody has watched fail
+        # is not a guard.
+        run: bash infra/scripts/test-check-no-env-files.sh
+
+      - name: Reject committed environment files
+        run: bash infra/scripts/check-no-env-files.sh
 
       - name: Scan for credential-shaped strings
         run: |
           set +e
-          PATTERN='(BEGIN (RSA|EC|OPENSSH|PGP) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36})'
+          PATTERN='(BEGIN (RSA|EC|OPENSSH|PGP) PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36}|xox[baprs]-)'
           MATCHES=$(git grep -nIE "$PATTERN" -- . ':!*.lock' ':!pnpm-lock.yaml')
           if [ -n "$MATCHES" ]; then
             echo "::error::Possible secret committed:"
@@ -191,14 +217,20 @@ jobs:
           echo "No credential-shaped strings found."
 
   # ---------------------------------------------------------------------------
-  # Proves the documented startup sequence actually works, which a unit test
-  # cannot: images build, migrations apply, and both services report healthy.
+  # Proves the documented startup sequence works, and that the committed API
+  # contract matches the running API.
   # ---------------------------------------------------------------------------
   stack-smoke:
     name: Local stack smoke test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Start the stack
         run: docker compose -f infra/docker-compose.yml --profile app up -d --build --wait
@@ -212,6 +244,14 @@ jobs:
         run: |
           curl -fsS http://localhost:8001/health | grep -q '"status":"ok"'
           curl -fsS http://localhost:8001/ready  | grep -q '"status":"ready"'
+
+      - name: API contract has not drifted
+        # The committed OpenAPI document is the contract of record (ADR-001).
+        # An endpoint cannot change without that change being visible in the
+        # diff.
+        env:
+          EIP_API_BASE_URL: http://localhost:8000
+        run: node packages/contracts/scripts/sync-openapi.mjs --check
 
       - name: Dump logs on failure
         if: failure()

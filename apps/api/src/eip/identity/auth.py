@@ -31,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from eip.identity.models import AppUser, Membership, Role, RoleCapability, Tenant
+from eip.identity.oidc import TokenVerifier, VerifiedToken
 from eip.platform.context import (
     ROLE_CAPABILITIES,
     ActorType,
@@ -102,48 +103,20 @@ def issue_dev_token(
     return token, settings.auth_access_token_ttl_seconds
 
 
-def verify_token(settings: Settings, token: str) -> TokenClaims:
-    """Verify a bearer token's signature, issuer, audience, and expiry.
-
-    ``algorithms`` is pinned to a single value. Honouring the token's own
-    ``alg`` header is the classic JWT algorithm-confusion vulnerability, and a
-    list containing ``none`` would be catastrophic.
-    """
-    if settings.is_production_like and not settings.auth_oidc_jwks_url:
-        msg = (
-            "No OIDC JWKS URL configured in a production-like environment. "
-            "Refusing to fall back to development token verification (ADR-010)."
-        )
-        raise ConfigurationError(msg)
-
-    try:
-        payload: dict[str, Any] = jwt.decode(
-            token,
-            settings.auth_dev_signing_secret.get_secret_value(),
-            algorithms=[_ALGORITHM],
-            audience=settings.auth_audience,
-            issuer=settings.auth_issuer,
-            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
-        )
-    except jwt.ExpiredSignatureError as exc:
-        raise UnauthenticatedError("The access token has expired.") from exc
-    except jwt.InvalidTokenError as exc:
-        # Deliberately uniform: never disclose *why* verification failed.
-        raise UnauthenticatedError("The access token is not valid.") from exc
-
-    raw_tid = payload.get("tid")
+def _to_claims(verified: VerifiedToken) -> TokenClaims:
+    raw_tid = verified.requested_tenant_id
     requested_tenant_id: uuid.UUID | None = None
     if raw_tid is not None:
         try:
-            requested_tenant_id = uuid.UUID(str(raw_tid))
+            requested_tenant_id = uuid.UUID(raw_tid)
         except (ValueError, AttributeError, TypeError) as exc:
             raise UnauthenticatedError("The access token is not valid.") from exc
 
     return TokenClaims(
-        subject=str(payload["sub"]),
-        issuer=str(payload["iss"]),
+        subject=verified.subject,
+        issuer=verified.issuer,
         requested_tenant_id=requested_tenant_id,
-        expires_at=datetime.fromtimestamp(float(payload["exp"]), tz=UTC),
+        expires_at=datetime.fromtimestamp(float(verified.claims["exp"]), tz=UTC),
     )
 
 
@@ -209,6 +182,7 @@ async def resolve_context(
     *,
     factory: async_sessionmaker[AsyncSession],
     settings: Settings,
+    verifier: TokenVerifier,
     token: str,
     trace_id: str,
     request_id: str,
@@ -228,7 +202,7 @@ async def resolve_context(
     authorization scope on their behalf. A user with none is refused:
     authenticated is not authorized.
     """
-    claims = verify_token(settings, token)
+    claims = _to_claims(await verifier.verify(token))
 
     async with unscoped_session(factory) as session:
         principal = await _load_principal(session, claims)

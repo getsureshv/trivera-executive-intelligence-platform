@@ -153,7 +153,10 @@ class TestMigrations:
             revision = (
                 await conn.execute(text("SELECT version_num FROM alembic_version"))
             ).scalar_one()
-        assert revision == "0001_control_plane"
+        # The current head. Update when a migration is added, so that a
+        # forgotten `alembic upgrade` in an environment is caught here rather
+        # than by a confusing failure elsewhere.
+        assert revision == "0002_isolation_audit"
 
     async def test_seed_roles_are_present(self, app_engine: AsyncEngine) -> None:
         async with app_engine.connect() as conn:

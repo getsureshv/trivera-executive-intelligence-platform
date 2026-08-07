@@ -64,4 +64,5 @@ asyncio_mode = "auto"
 addopts = "-ra --strict-markers"
 markers = [
     "integration: requires a live PostgreSQL",
+    "security: RELEASE-GATING privilege and isolation tests",
 ]

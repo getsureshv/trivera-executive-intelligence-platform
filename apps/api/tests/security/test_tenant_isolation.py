@@ -142,9 +142,7 @@ class TestDatabaseLevelIsolation:
         """
         async with unscoped_session(app_sessions) as session:
             for table in ("membership", "audit_event", "outbox"):
-                count = (
-                    await session.execute(text(f"SELECT count(*) FROM {table}"))  # noqa: S608
-                ).scalar_one()
+                count = (await session.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one()
                 assert count == 0, f"RLS FAILED: {table} readable without tenant context"
 
     async def test_blank_tenant_setting_is_treated_as_unset(

@@ -24,6 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from eip.platform.settings import Environment, Settings
 
+# Registers every ORM mapper. conftest is imported before any test module, so
+# doing it here covers the whole suite (see eip/models.py for why it matters).
+import eip.models  # noqa: F401  # isort: skip
+
 # ---------------------------------------------------------------------------
 # database availability
 # ---------------------------------------------------------------------------
@@ -185,7 +189,7 @@ async def _reset(engine: AsyncEngine) -> None:
     """
     async with engine.begin() as conn:
         for table in _RESET_ORDER:
-            await conn.execute(text(f"DELETE FROM {table}"))  # noqa: S608 - fixed list
+            await conn.execute(text(f"DELETE FROM {table}"))
 
 
 @pytest.fixture

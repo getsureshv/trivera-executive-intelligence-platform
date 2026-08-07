@@ -23,6 +23,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Registers every ORM mapper before any request can touch one.
+import eip.models  # noqa: F401
 from eip.api.middleware import (
     CorrelationMiddleware,
     handle_eip_error,
@@ -30,6 +32,11 @@ from eip.api.middleware import (
 )
 from eip.api.routers import admin, dev_auth, health, tenancy
 from eip.dataplane.registry import build_data_plane
+from eip.identity.oidc import (
+    assert_algorithms_are_asymmetric,
+    build_verifier,
+    discover_jwks_url,
+)
 from eip.platform.db import (
     assert_rls_covers_tenant_tables,
     assert_runtime_role_is_constrained,
@@ -58,6 +65,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Isolation invariants. These raise ConfigurationError and abort startup.
     await assert_runtime_role_is_constrained(engines.app)
     await assert_rls_covers_tenant_tables(engines.app)
+
+    # Authentication. A production-like environment with incomplete OIDC
+    # configuration fails here rather than at every sign-in (ADR-010 §1).
+    assert_algorithms_are_asymmetric()
+    jwks_url = settings.auth_oidc_jwks_url
+    if settings.is_production_like and not jwks_url:
+        # Fall back to discovery, not to a weaker verifier.
+        jwks_url = await discover_jwks_url(settings.auth_issuer)
+    app.state.token_verifier = build_verifier(settings, jwks_url=jwks_url or None)
 
     _log.info(
         "api.started",

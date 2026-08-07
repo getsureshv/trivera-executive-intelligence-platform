@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import pickle
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 
@@ -178,6 +179,12 @@ class TestAuditHash:
             "prev_hash": GENESIS_HASH,
             "tenant_id": uuid.UUID("11111111-1111-1111-1111-111111111111"),
             "seq": 1,
+            # Present since the Phase 1A remediation: these four were outside
+            # the digest and could be rewritten undetected.
+            "occurred_at": datetime(2026, 1, 1, 12, 0, tzinfo=UTC),
+            "actor_type": "user",
+            "trace_id": "trace-1",
+            "request_id": "request-1",
             "action": "tenant.provisioned",
             "resource_type": "tenant",
             "resource_id": "abc",
@@ -200,6 +207,10 @@ class TestAuditHash:
             ("outcome", "failure"),
             ("detail", {"slug": "other"}),
             ("prev_hash", "f" * 64),
+            ("occurred_at", datetime(2026, 1, 1, 12, 0, 1, tzinfo=UTC)),
+            ("actor_type", "system"),
+            ("trace_id", "trace-2"),
+            ("request_id", "request-2"),
         ],
     )
     def test_changing_any_field_changes_the_hash(self, field: str, value: object) -> None:

@@ -90,9 +90,21 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests may hardcode local-only credentials and use asserts freely.
-"tests/**" = ["S105", "S106", "S107"]
+# S608 is permitted because the isolation suites must construct deliberately
+# hostile, fully-qualified cross-tenant SQL — proving PostgreSQL refuses it is
+# the entire point, and parameterising those statements would defeat the test.
+"tests/**" = ["S105", "S106", "S107", "S608"]
 # Alembic templates are generated.
 "migrations/versions/*" = ["E501"]
+# This module provisions per-tenant schemas and roles. PostgreSQL accepts no
+# bind parameter for an identifier in DDL, so every statement here interpolates.
+# The safety argument is structural rather than per-line: identifiers come from
+# `_identifier`, which derives them from a tenant UUID held in an authenticated
+# record and validates them against `_SAFE_IDENTIFIER`. Request input cannot
+# reach these strings. Suppressing S608 file-wide is honest about that; a
+# scattering of per-line directives would imply each site had been reasoned
+# about separately when the guarantee is a property of the module.
+"src/eip/dataplane/schema_per_tenant.py" = ["S608"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["eip"]

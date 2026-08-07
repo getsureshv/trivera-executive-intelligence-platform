@@ -108,10 +108,10 @@ class TestAuditChainIsTamperEvident:
                 )
 
         async with tenant_session(app_sessions, context) as session:
-            ok, bad_seq = await audit.verify_chain(session, seeded.tenant_a.id)
+            result = await audit.verify_chain(session, seeded.tenant_a.id)
 
-        assert ok is True
-        assert bad_seq is None
+        assert result.status is audit.ChainStatus.INTACT
+        assert result.ok is True
 
     async def test_modification_breaks_the_chain(
         self,
@@ -147,10 +147,11 @@ class TestAuditChainIsTamperEvident:
             )
 
         async with tenant_session(app_sessions, context) as session:
-            ok, bad_seq = await audit.verify_chain(session, seeded.tenant_a.id)
+            result = await audit.verify_chain(session, seeded.tenant_a.id)
 
-        assert ok is False, "TAMPERING UNDETECTED: the audit chain still verified"
-        assert bad_seq == 2
+        assert result.ok is False, "TAMPERING UNDETECTED: the audit chain still verified"
+        assert result.status is audit.ChainStatus.MUTATED
+        assert result.at_seq == 2
 
     async def test_chains_are_independent_per_tenant(
         self, app_sessions: async_sessionmaker[AsyncSession], seeded: Fixtures

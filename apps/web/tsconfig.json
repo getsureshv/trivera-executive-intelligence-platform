@@ -3,6 +3,10 @@
   "compilerOptions": {
     "jsx": "preserve",
     "noEmit": true,
+    // Node's --experimental-strip-types resolves the literal specifier, so test
+    // files import "./errors.ts". tsc rejects that unless this is enabled; it is
+    // safe here because nothing is emitted.
+    "allowImportingTsExtensions": true,
     "incremental": true,
     "allowJs": true,
     "plugins": [{ "name": "next" }],

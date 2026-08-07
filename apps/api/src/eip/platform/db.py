@@ -32,7 +32,7 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -73,6 +73,21 @@ GLOBAL_TABLES: Final[frozenset[str]] = frozenset(
         "role",  # platform-shipped role catalog
         "role_capability",
         "alembic_version",
+        # The audit checkpoint. Carries a tenant_id but is deliberately NOT
+        # RLS-protected, for two reasons:
+        #
+        #  1. It is written only by a SECURITY DEFINER trigger running as the
+        #     table owner. Under FORCE RLS that trigger would be blocked during
+        #     a platform session, where no app.tenant_id is set — so audit
+        #     events for privileged operations could not be recorded at all.
+        #  2. It holds no tenant business data: a tenant id, a sequence number,
+        #     a hash, and timestamps. Tenant ids are already visible to eip_app
+        #     through the (global) `tenant` table, so this grants no knowledge
+        #     that role did not already have.
+        #
+        # Write access is what matters here, and it is denied to every runtime
+        # and platform role (migration 0002). The API never exposes this table.
+        "audit_chain_head",
     }
 )
 
@@ -89,9 +104,8 @@ class Engines:
     platform: AsyncEngine
 
 
-def create_engines(settings: Settings) -> Engines:
-    """Build the application and platform engines."""
-    common = {
+def _engine_options(settings: Settings) -> dict[str, Any]:
+    return {
         "echo": settings.db_echo,
         "pool_size": settings.db_pool_size,
         "max_overflow": settings.db_max_overflow,
@@ -100,6 +114,23 @@ def create_engines(settings: Settings) -> Engines:
         # (the deployment target) does not support prepared statements.
         "connect_args": {"statement_cache_size": 0, "server_settings": {}},
     }
+
+
+def create_app_engine(settings: Settings) -> AsyncEngine:
+    """Build **only** the constrained runtime engine.
+
+    Used by processes that must be structurally incapable of opening a
+    privileged connection — the worker, above all. A process that never
+    constructs a platform engine cannot accidentally acquire BYPASSRLS through
+    a configuration mistake, which is a stronger guarantee than simply not
+    setting the environment variable (ADR-009; Phase 1A finding 3).
+    """
+    return create_async_engine(settings.db_app_dsn, **_engine_options(settings))
+
+
+def create_engines(settings: Settings) -> Engines:
+    """Build both engines. Only the API process should call this."""
+    common = _engine_options(settings)
     return Engines(
         app=create_async_engine(settings.db_app_dsn, **common),
         platform=create_async_engine(settings.db_platform_dsn, **common),
@@ -136,12 +167,22 @@ async def assert_runtime_role_is_constrained(engine: AsyncEngine) -> None:
         row = (
             await conn.execute(
                 text(
-                    "SELECT rolname, rolsuper, rolbypassrls "
+                    "SELECT rolname, rolsuper, rolbypassrls, rolinherit "
                     "FROM pg_roles WHERE rolname = current_user"
                 )
             )
         ).one()
-        rolname, is_super, bypasses_rls = row
+        rolname, is_super, bypasses_rls, inherits = row
+
+        if inherits:
+            msg = (
+                f"Runtime database role {rolname!r} has INHERIT. The analytical data plane "
+                "makes this role a member of every per-tenant role so it can SET ROLE into "
+                "exactly one of them; with INHERIT it would instead hold the union of every "
+                "tenant's privileges, which defeats analytical isolation entirely. "
+                "Create it NOINHERIT (ADR-003 §2)."
+            )
+            raise ConfigurationError(msg)
 
         if is_super:
             msg = (

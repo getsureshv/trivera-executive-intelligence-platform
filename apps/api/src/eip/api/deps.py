@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from eip.dataplane.interfaces import TenantDataPlane
 from eip.identity.auth import resolve_context
+from eip.identity.oidc import TokenVerifier
 from eip.platform.context import Capability, PlatformContext, RoleCode, TenantContext
 from eip.platform.db import platform_session, tenant_session, unscoped_session
 from eip.platform.errors import ForbiddenError, UnauthenticatedError
@@ -51,12 +52,23 @@ def get_data_plane(request: Request) -> TenantDataPlane:
     return plane
 
 
+def get_token_verifier(request: Request) -> TokenVerifier:
+    """The environment-appropriate token verifier, built once at startup.
+
+    Built during lifespan so a production-like environment with incomplete OIDC
+    configuration fails to boot rather than failing every sign-in (ADR-010 §1).
+    """
+    verifier: TokenVerifier = request.app.state.token_verifier
+    return verifier
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
 SessionFactoryDep = Annotated[async_sessionmaker[AsyncSession], Depends(get_session_factory)]
 PlatformFactoryDep = Annotated[
     async_sessionmaker[AsyncSession], Depends(get_platform_session_factory)
 ]
 DataPlaneDep = Annotated[TenantDataPlane, Depends(get_data_plane)]
+VerifierDep = Annotated[TokenVerifier, Depends(get_token_verifier)]
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -72,6 +84,7 @@ async def get_tenant_context(
     request: Request,
     settings: SettingsDep,
     factory: SessionFactoryDep,
+    verifier: VerifierDep,
     authorization: Annotated[str | None, Header()] = None,
 ) -> TenantContext:
     """Resolve the caller's verified tenant context.
@@ -84,6 +97,7 @@ async def get_tenant_context(
     context = await resolve_context(
         factory=factory,
         settings=settings,
+        verifier=verifier,
         token=_bearer_token(authorization),
         trace_id=getattr(request.state, "trace_id", ""),
         request_id=getattr(request.state, "request_id", ""),
