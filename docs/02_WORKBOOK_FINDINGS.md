@@ -64,6 +64,19 @@ The workbook uses a recurring selector with these values:
 - Technology
 - Enterprise
 
+> **Phase 0 update ([ADR-005](adr/ADR-005-semantic-model.md) §5):** `Total` is **not** a
+> `DimensionValue`. It is the aggregate *over* the other values — i.e. the **absence of a
+> filter** on the dimension — represented in the query contract as no filter / no grouping
+> and rendered in the UI as an "All" affordance. Modelling it as a peer value would
+> double-count on any unfiltered aggregation. The dimension's values are `people`,
+> `process`, `technology`, `enterprise`.
+>
+> Separately, note that `People` and `Operations` are used in this repository for three
+> different things: workbook business areas → `Domain`, values of the operating-model
+> dimension, and KPI-card groupings on the executive home page
+> ([`08_UX_EXECUTIVE_EXPERIENCE.md`](08_UX_EXECUTIVE_EXPERIENCE.md)). These are distinct
+> concepts and must be named distinctly in configuration and code.
+
 This is the single most important thing to get right architecturally. In the workbook it
 drives cell lookups. In the platform it must become a **configurable dimension**, not
 code.

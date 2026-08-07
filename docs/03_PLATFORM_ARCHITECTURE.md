@@ -53,6 +53,44 @@ The stack is a recommendation to be confirmed in Phase 0 ADRs. It favors mainstr
 well-supported choices and clean abstraction seams so heavier components can be swapped
 in later.
 
+> **Phase 0 outcome ([ADR-002](adr/ADR-002-backend-framework.md),
+> [ADR-003](adr/ADR-003-multi-tenant-architecture.md),
+> [ADR-008](adr/ADR-008-analytical-storage.md),
+> [ADR-009](adr/ADR-009-background-job-architecture.md)):** eleven of the twelve proposed
+> choices are **confirmed**. Nothing was changed merely because an alternative exists.
+> Deltas:
+>
+> - **Celery is rejected**; **Dramatiq** is the executor. But the substantive decision is
+>   that **pipeline state lives in our PostgreSQL tables**, because run history *is*
+>   product data (freshness badges, provenance, ingestion audit) — which makes the broker
+>   a small, replaceable component and makes a later Temporal adoption additive rather
+>   than a rewrite. Temporal stays deferred, with named adoption triggers.
+> - **Python is confirmed with `mypy --strict` mandatory** — the metric compiler is where a
+>   type error becomes a wrong number on a CEO's screen. (The closest call in Phase 0 was
+>   the JVM, purely because Apache Calcite is most of the query compiler we must now write
+>   ourselves; recorded in ADR-002 and revisitable via a new ADR.)
+> - **"PostgreSQL initially where practical" is too vague to act on.** ADR-008 fixes
+>   PostgreSQL as the *sole* analytical engine, names **ClickHouse** as the pre-selected
+>   successor, and defines quantitative **exit triggers** so the migration is a pre-agreed
+>   operation rather than an emergency.
+> - **Snowflake / Databricks / BigQuery are re-framed.** They are not interchangeable
+>   back-ends behind one abstraction — they are systems **the customer already owns**,
+>   which makes them a distinct *product mode* (bring-your-own-warehouse, no data
+>   movement) with a different security posture, pricing model, and connector role. That
+>   is a go-to-market decision, escalated as review question **Q1**.
+> - **Object storage is promoted from "later" to required from Phase 2/3** — the raw
+>   landing zone is what makes reprocessing after a mapping change possible without
+>   re-reading the source, and mappings change constantly during onboarding.
+> - **DuckDB is added, scoped strictly to ingestion and profiling** (parsing and
+>   type-inferring file extracts in-process). It is not the analytical store and is not
+>   reachable from the governed query path.
+> - **Next.js is confirmed with one hard constraint:** the Node tier gets **no database
+>   credentials in any environment**, so it cannot become a second, ungoverned data path
+>   ([ADR-001](adr/ADR-001-repository-architecture.md)).
+>
+> Full reasoning: [`17_PHASE_0_ARCHITECTURE_REVIEW.md`](17_PHASE_0_ARCHITECTURE_REVIEW.md)
+> § *Technology Decisions*.
+
 **Frontend**
 
 - Next.js
@@ -148,6 +186,23 @@ A dashboard KPI render, end to end, to show the spine in motion:
 The **assistant** follows the same spine (see
 [`06_AI_CHAT_ARCHITECTURE.md`](06_AI_CHAT_ARCHITECTURE.md)); it does not get a private,
 faster, or less-governed path.
+
+> **Phase 0 decision — the platform materializes; it does not federate**
+> ([ADR-007](adr/ADR-007-governed-query-engine.md) §7,
+> [ADR-008](adr/ADR-008-analytical-storage.md)). The layer list above implies both an
+> "Ingestion / ELT" path and an "Analytical Store" queried by the metric engine, and never
+> states which model governs. It does now: data is **ingested into a tenant-isolated
+> analytical store** and queried there. Reasons: reproducibility, stable history for the
+> insight engine, profiling and quality checks that would otherwise hammer a customer's
+> production systems, freshness that is *knowable* rather than assumed, and no risk of
+> degrading a customer's operational database. Federated/pushdown execution is retained as
+> a named future mode for customers who forbid data movement.
+>
+> Step 3 is also refined: the Governed Query Service **authorizes before it compiles**,
+> resolves the metric under a pinned `config_version`, rejects ambiguous join paths and
+> unsafe fan-out rather than guessing, injects row-level predicates **into the plan**
+> (never as a post-filter, which leaks through aggregates), and returns a **mandatory
+> envelope** carrying freshness, quality, provenance, and lineage availability.
 
 ## Multi-tenancy at the architecture level
 

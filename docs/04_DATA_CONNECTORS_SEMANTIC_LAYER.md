@@ -37,6 +37,20 @@ The method names are the contract:
 - `extract()` — pull data for ingestion, supporting incremental options where possible.
 - `health()` — report ongoing connector health for monitoring and alerting.
 
+> **Phase 0 update ([ADR-004](adr/ADR-004-connector-framework.md)):** this protocol is
+> superseded. The revised contract is **async**, discovery is **paginated and
+> cancellable**, `extract()` **streams resumable batches** against an `ExtractPlan` with a
+> committed watermark, and every connector declares a `capabilities()` object plus a
+> `config_schema()`. Callers branch on **declared capabilities, never on connector type**
+> — that is what makes provider neutrality mechanical rather than aspirational. Native
+> types are normalized into a platform canonical type system (decimals are never coerced
+> to floats). Extractions land **raw in tenant-prefixed object storage** before
+> transformation, so a mapping change can be reprocessed without re-reading the source.
+> ADR-004 also adds two things absent here: **egress control** (deny RFC1918, loopback,
+> link-local and cloud metadata endpoints — this protocol as written is an SSRF
+> primitive) and a **customer connectivity model** (direct / private link / tenant-deployed
+> agent) for sources that are not internet-reachable.
+
 ### Initial connectors
 
 - PostgreSQL
@@ -94,6 +108,31 @@ data business meaning independent of any source system.
 - **SourceField** — a concrete field on a source object (e.g. `dbo.InvoiceHdr.inv_amt`).
 - **FieldMapping** — the governed link from a source field to a semantic field.
 - **Transformation** — the normalization/derivation applied along the way.
+
+> **Phase 0 update ([ADR-005](adr/ADR-005-semantic-model.md)) — this is the most important
+> correction in the set.** Field-level mapping is **necessary but not sufficient**, and
+> shipping it alone would produce a platform that renames fields successfully and computes
+> revenue wrongly. It cannot express:
+>
+> - **grain** — is one row an invoice header or a transaction line?
+> - **row qualification** — do refunds, credit memos, intercompany transfers, and test
+>   rows count as revenue?
+> - **joins** — slicing by `Region` requires a declared relationship, with cardinality, or
+>   the aggregate fans out and silently inflates;
+> - **units** — cents vs. dollars, gross vs. net, source currency vs. reporting currency;
+> - **time anchors** — invoice date, service date, recognition date, or payment date?
+>
+> ADR-005 therefore makes the **`EntityBinding`** the governed unit of mapping — attaching
+> a semantic entity to a source object with a declared grain assertion, row filter,
+> currency policy, time bindings, and field bindings — and adds **`SemanticRelationship`**
+> with cardinality-aware join-path resolution and fan-out detection. Semantic fields gain
+> `semantic_type`, `unit`, `additivity`, `sign_convention`, and `classification`. Semantic
+> entities gain `grain`, `natural_key`, `required_fields`, and `time_anchors`, becoming
+> **semantic contracts** a binding can be **automatically validated** against.
+>
+> Transformations remain a **closed, typed expression set** (JSON AST) — never SQL, never
+> user-supplied code — so they stay safe, statically analyzable for lineage, diffable, and
+> portable across analytical engines.
 
 The workbook's `Total / People / Process / Technology / Enterprise` selector is modeled
 here as a `Dimension` with its `DimensionValue`s — configuration, never code (see

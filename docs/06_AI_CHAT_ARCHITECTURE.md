@@ -42,6 +42,30 @@ User Question
 The model enters only at steps 2 (as a classifier/parser) and 8 (as an explainer). The
 numbers themselves are produced by the governed spine, never by the model.
 
+> **Phase 0 update ([ADR-011](adr/ADR-011-ai-provider-and-orchestration.md)):** the
+> pipeline and its founding prohibition are confirmed. Four changes:
+>
+> 1. **Step 2 becomes constrained plan generation, not intent classification.** The model
+>    emits a `QueryPlanRequest` conforming to a schema generated per request from *that
+>    tenant's* governed catalog, filtered to *that principal's* authorized metrics and
+>    dimensions. A deterministic validator — not the model — is the security boundary.
+>    Real questions are compositional ("advisory revenue in the East region versus plan,
+>    versus the same quarter last year, and which service line moved most"); a closed
+>    intent enum forces the classifier to pick one intent and discard the rest. The enum
+>    survives only as a coarse router.
+> 2. **Every prompt has two trust zones.** Tenant-derived content — discovered field
+>    names, table comments, glossary terms, sampled values — is delimited and labelled as
+>    **data, never instruction**. Prompt injection through source metadata is a live
+>    vector, most acutely in the AI mapping assistant, whose entire purpose is reading
+>    untrusted source metadata. Model output is never executed and never makes an
+>    authorization decision.
+> 3. **A deterministic numeric grounding check** verifies that every number in the
+>    narrative appears in the supplied evidence; a mismatch fails the response rather than
+>    shipping it.
+> 4. **Step 7 gates step 8 absolutely.** If evidence is insufficient the model is *not
+>    called* — it is never asked to explain that there is no data, because a model given
+>    thin evidence fills gaps.
+
 ## Supported intents
 
 The intent set may include:
@@ -100,8 +124,28 @@ first, narrative second."
 
 LLM integration is **provider-neutral**. The pipeline depends on an LLM gateway
 interface, not on a specific vendor SDK, so the model can be swapped without touching
-intent detection, authorization, query planning, or validation. No production data or
-secrets are ever placed in prompts (see
+intent detection, authorization, query planning, or validation.
+
+> **Phase 0 correction ([ADR-011](adr/ADR-011-ai-provider-and-orchestration.md) §3):** the
+> blanket phrase "no production data in prompts" contradicts step 8, which requires the
+> model to explain validated evidence — and validated evidence *is* production-derived.
+> As written, the rule forbade the architecture. The precise rule is:
+>
+> **Never in a prompt:** secrets or credentials; raw source rows that have not passed
+> through the governed pipeline; another tenant's data in any form; anything the
+> requesting principal is not authorized to see; personal data beyond what the answer
+> requires.
+>
+> **Deliberately in the prompt:** governed, authorized, validated evidence — the
+> aggregates, comparisons, periods, and metadata the model must narrate. Row-level detail
+> is aggregated first wherever the answer permits, and PII-classified fields are masked
+> unless the principal is cleared and the question requires them.
+>
+> Also required: no cross-tenant prompt or completion caching, no fine-tuning on tenant
+> data, tenant-partitioned embeddings, per-tenant token budgets and cost attribution, and
+> a zero-retention contractual commitment as a provider *eligibility gate*.
+
+See
 [`07_SECURITY_MULTITENANCY_GOVERNANCE.md`](07_SECURITY_MULTITENANCY_GOVERNANCE.md) and
 [`11_AGENT_GUARDRAILS.md`](11_AGENT_GUARDRAILS.md)).
 

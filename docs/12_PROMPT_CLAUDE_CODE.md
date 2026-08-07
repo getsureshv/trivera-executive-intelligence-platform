@@ -15,9 +15,11 @@ EXPLORE → PLAN → IMPLEMENT → VERIFY
 ```
 
 - **EXPLORE** — read the relevant `/docs` and existing code before touching anything.
-  Start from `README.md`, then `CLAUDE.md`, then the docs relevant to the task
-  (architecture `03`, connectors/semantic `04`, metrics/insights `05`, security `07`,
-  domain/API `09`), then `11_AGENT_GUARDRAILS.md`.
+  Start from `docs/README.md`, then `CLAUDE.md`, then
+  `17_PHASE_0_ARCHITECTURE_REVIEW.md` and the **ADRs in `docs/adr/`** (which outrank the
+  numbered documents), then the docs relevant to the task (architecture `03`,
+  connectors/semantic `04`, metrics/insights `05`, security `07`, domain/API `09`), then
+  `11_AGENT_GUARDRAILS.md`.
 - **PLAN** — write a short, explicit plan: what will change, which bounded contexts it
   touches, what migrations are needed, and how it will be verified. Surface open
   questions instead of guessing at product behavior.
@@ -36,7 +38,12 @@ unrestricted LLM database access, no secrets in source control, the workbook is 
 prototype only, no hard-coded workbook dimensions, migrations for schema changes, and
 evidence first / narrative second.
 
-## First assignment: Phase 0 ONLY
+## First assignment: Phase 0 ONLY — **COMPLETE (2026-08-07)**
+
+> **Status:** Phase 0 was executed on 2026-08-07. Outputs: `docs/adr/ADR-001` … `ADR-015`,
+> [`17_PHASE_0_ARCHITECTURE_REVIEW.md`](17_PHASE_0_ARCHITECTURE_REVIEW.md), and
+> [`18_FIRST_VERTICAL_SLICE.md`](18_FIRST_VERTICAL_SLICE.md). No application code was
+> written. Phase 1 remains gated on the review's *Readiness Verdict*.
 
 Claude Code's **first assignment is Phase 0 — Architecture validation, and nothing
 else.** In Phase 0 it:

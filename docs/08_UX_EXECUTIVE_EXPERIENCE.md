@@ -91,3 +91,22 @@ The wizard is the human-facing embodiment of the operating model: it walks a ten
 DATA (steps 5–7) through BUSINESS MEANING (step 8) to GOVERNED METRICS (steps 9–10) and
 on to the experience (steps 11–12). Every step it produces is versioned configuration,
 so the whole onboarding is auditable and reversible.
+
+> **Phase 0 update.** Three changes:
+>
+> 1. **KPI-pack selection moves before mapping.** As ordered, step 8 asks a steward to map
+>    fields before step 9 establishes which KPIs the tenant actually needs — so there is no
+>    way to know which fields matter. The KPI pack defines the **semantic contracts** that
+>    bindings must satisfy ([ADR-005](adr/ADR-005-semantic-model.md)), so it must come
+>    first and *drive* discovery and mapping.
+> 2. **Step 8 produces entity bindings, not field mappings**, and cannot complete until
+>    **binding validation passes** — grain uniqueness, required fields bound, types and
+>    units compatible, time anchors bound. This validation gate is what makes "onboard by
+>    configuration" verifiable rather than hopeful.
+> 3. **Fiscal calendar (step 3) is a hard prerequisite** for anything computing
+>    `fiscal_ytd`/QTD/MTD, and **currency policy** joins it where the tenant is
+>    multi-currency. The wizard should block rather than defaulting silently.
+>
+> The wizard's output is a **draft `ConfigurationBundle`**; "Review and Publish" (step 12)
+> is an atomic bundle publish, gated on validation and acceptance assertions
+> ([ADR-013](adr/ADR-013-configuration-versioning.md)).

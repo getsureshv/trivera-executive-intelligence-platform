@@ -20,8 +20,10 @@ DATA → BUSINESS MEANING → GOVERNED METRICS → INSIGHTS → DECISION SUPPORT
 
 ## Non-negotiable rules
 
-1. **Read relevant `/docs` before major changes.** Architecture lives in
-   `03_PLATFORM_ARCHITECTURE.md`; the doc index is in `README.md`.
+1. **Read relevant `/docs` before major changes.** The doc index is `docs/README.md`.
+   Architecture lives in `03_PLATFORM_ARCHITECTURE.md`, as corrected by the Phase 0 ADRs
+   in `docs/adr/` and the review in `docs/17_PHASE_0_ARCHITECTURE_REVIEW.md`. **Accepted
+   ADRs outrank the numbered documents.**
 2. **Configuration over tenant-specific code.** No `if tenant == "X"` branches. New
    behavior is expressed as metadata, not code paths.
 3. **The semantic model sits between sources and metrics.** Raw source fields never
@@ -63,8 +65,14 @@ DATA → BUSINESS MEANING → GOVERNED METRICS → INSIGHTS → DECISION SUPPORT
 
 ## Current phase
 
-The repository is in **documentation bootstrap**. Application code has not started.
-The next assignment is **Phase 0 — Architecture validation** (see
-`docs/10_IMPLEMENTATION_ROADMAP.md` and `docs/12_PROMPT_CLAUDE_CODE.md`). Do not
-scaffold Next.js, FastAPI, Docker, the database, or connectors until Phase 0 is
-explicitly approved.
+**Phase 0 — Architecture validation is complete** (2026-08-07). Its outputs are
+`docs/adr/ADR-001` … `ADR-015`, `docs/17_PHASE_0_ARCHITECTURE_REVIEW.md`, and
+`docs/18_FIRST_VERTICAL_SLICE.md`. Application code has **not** started.
+
+Phase 1 is approved to begin only once the conditions in the review's *Readiness Verdict*
+are met (product-owner questions Q1–Q4 answered; the eleven recommended changes reflected
+in the docs). Until then, do not scaffold Next.js, FastAPI, Docker, the database, or
+connectors.
+
+Where a Phase 0 ADR corrects a numbered document, the ADR governs; affected documents
+carry a `> **Phase 0 update**` callout pointing at it.

@@ -17,7 +17,9 @@ chatbot, warehouse, or generic BI tool.
 ## Rules every agent must follow
 
 1. Read the relevant files in `/docs` before making architectural or cross-cutting
-   changes. Start from the index in `README.md`.
+   changes. Start from the index in `docs/README.md`. **Accepted ADRs in `docs/adr/`
+   outrank the numbered documents**; see `docs/17_PHASE_0_ARCHITECTURE_REVIEW.md` for the
+   Phase 0 corrections.
 2. Prefer **configuration over customization** and **metadata over tenant-specific
    code**. Never write per-tenant `if` branches in business logic.
 3. Keep the **semantic layer** between raw sources and metrics. Source fields do not
@@ -62,6 +64,7 @@ chatbot, warehouse, or generic BI tool.
 
 ## Status
 
-Documentation bootstrap phase. No application code yet. Next up is **Phase 0 —
-Architecture validation**. Do not scaffold frameworks, Docker, the database, or
-connectors before Phase 0 is approved.
+**Phase 0 — Architecture validation is complete** (2026-08-07): ADR-001 … ADR-015,
+`docs/17_PHASE_0_ARCHITECTURE_REVIEW.md`, `docs/18_FIRST_VERTICAL_SLICE.md`. No
+application code yet. Do not scaffold frameworks, Docker, the database, or connectors
+until Phase 1 is explicitly approved per the review's *Readiness Verdict*.

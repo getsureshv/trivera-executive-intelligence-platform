@@ -34,6 +34,25 @@ A metric definition includes:
 - **effective dates** — when the definition applies.
 - **lineage** — the traceable derivation (see below).
 
+> **Phase 0 update ([ADR-006](adr/ADR-006-metric-definition-and-kpi-engine.md)):**
+>
+> - **`expression` is a typed AST persisted as JSON, never a string.** A free-text
+>   expression cannot be diffed, validated at publish, lineage-traced automatically, or
+>   compiled portably — and it is the trapdoor through which ad-hoc SQL re-enters.
+> - **`target` and `thresholds` are entities, not scalar fields.** Targets vary by period
+>   and by dimension slice, with most-specific-match resolution.
+>   [`09_DOMAIN_MODEL_API_CONTRACTS.md`](09_DOMAIN_MODEL_API_CONTRACTS.md) is correct;
+>   this list was not.
+> - A metric additionally declares `time_anchor`, `default_period`, `direction`
+>   (higher/lower-is-better — the insight engine cannot judge a change without it), and
+>   `additivity`, which the compiler **checks**: averaging a semi-additive measure over
+>   time is rejected at publish.
+> - **Published metric versions are immutable**, identified by a content hash, and
+>   referenced by id in every result and observation. Editing creates a new version.
+> - New: **metric acceptance assertions** (e.g. `revenue_ytd FY2025 == the CFO's close
+>   ± 0.5%`, and `sum(by region) == ungrouped total`), run on publish and on a schedule.
+>   This is the mechanism by which a tenant *earns* trust in a configured metric.
+
 ### Supported metric types
 
 - sum
@@ -52,6 +71,28 @@ A metric definition includes:
 - target variance
 - forecast
 - calculated metric (composed from other metrics)
+
+> **Phase 0 update ([ADR-006](adr/ADR-006-metric-definition-and-kpi-engine.md)):** this
+> flat list conflates four different things — aggregations (`sum`, `count`), time
+> *periods* (`YTD`, `QTD`, `MTD`), compositions (`ratio`, `growth rate`, `variance`,
+> `calculated`), and a *model* (`forecast`). As an enum it cannot express an ordinary
+> executive question such as "YTD of a ratio versus prior year." It is replaced by **five
+> composable AST node kinds** — aggregation, ratio, arithmetic, time-shift, window — plus
+> orthogonal period and grain parameters.
+>
+> `revenue_ytd` survives as a named, owned, governed metric (executives refer to it by
+> name and it needs its own target), but it is *defined by composition*: the `revenue`
+> aggregation evaluated over the `fiscal_ytd` period resolved from the tenant's fiscal
+> calendar.
+>
+> **`forecast` is not a metric node.** It is a model producing observations with
+> `origin: forecast`, a model id, and a confidence interval — consumed like a metric but
+> never mixed into an actuals aggregation. Blurring the two would let a projection appear
+> as a fact, violating principle 12.
+>
+> **Ratios declare their aggregation order.** `win_rate` is `SUM(won)/SUM(total)` at the
+> query's grouping level, not the average of per-row rates, and ratio metrics are marked
+> non-additive so nothing sums them across slices.
 
 ### Example
 
@@ -98,6 +139,28 @@ find every place a source field is used.
 see it. It is the concrete answer to executive question 8 ("What evidence supports that
 conclusion?") and it is what lets leadership trust a number enough to act on it.
 
+> **Phase 0 update ([ADR-012](adr/ADR-012-data-lineage.md)):** lineage is **derived** from
+> the metric AST and the binding graph on demand — never stored as a parallel structure.
+> Stored lineage is maintained lineage, and maintained lineage drifts; a trust artifact
+> that lies is worse than none. (A materialized projection exists purely as a *cache*,
+> labelled as such and keyed by `config_version`. `MetricLineage` is removed as a
+> system-of-record entity from
+> [`09_DOMAIN_MODEL_API_CONTRACTS.md`](09_DOMAIN_MODEL_API_CONTRACTS.md).)
+>
+> The chain above is **design-time lineage** — "how is this number defined?" It cannot
+> answer the question that actually destroys executive confidence: *"why is this different
+> from the screenshot I took last Tuesday?"* ADR-012 therefore adds **run-time
+> provenance** — `config_version`, `metric_version`, `plan_hash`, `data_snapshot_id`,
+> source watermarks, and `computed_at` on every result and every stored observation — plus
+> explicit **restatement** handling: observations are append-only, a restatement is a
+> recorded event, and insight signals caused purely by restatement are suppressed rather
+> than reported as business changes.
+>
+> Lineage is also **bidirectional**: downward for drill-to-source, upward for **impact
+> analysis** ("what depends on this field?"), which becomes a publish-time gate. And it is
+> **authorization-aware** — nodes the principal cannot see are redacted placeholders that
+> preserve the shape of the chain without leaking its content.
+
 ## Insight engine
 
 The insight engine decides **what deserves attention**. It does **not** use an LLM as
@@ -126,6 +189,26 @@ Deterministic/statistical signal detection runs over governed metrics for:
 Because detection is deterministic, signals are reproducible, testable, and auditable —
 the same inputs always produce the same signals, which is a property no LLM-only
 detector can offer.
+
+> **Phase 0 update ([ADR-008](adr/ADR-008-analytical-storage.md) §8,
+> [ADR-012](adr/ADR-012-data-lineage.md) §3):** these signals require a **stable
+> history**, which the documentation assumed rather than provided. A per-tenant,
+> append-only **`MetricObservation`** store records
+> `(metric_version, period, dimension_key, value, computed_at, config_version,
+> data_snapshot_id, origin)`. Recomputing history on each run would be both expensive and
+> *wrong* — it would erase the record of what the business believed at the time.
+>
+> Two further requirements, both missing:
+>
+> - **Signal state and suppression.** Without it, the same signal re-fires every run and
+>   executives switch the attention surface off. Signals carry state, dedupe, and
+>   restatement-aware suppression.
+> - **A scoped-scan policy.** Signals × metrics × dimensions × dimension values explodes —
+>   50 metrics × 5 dimensions × 20 values × 13 signal types is ~65,000 evaluations per
+>   tenant per run. Detection descends hierarchically (slice only where the parent metric
+>   already signals), runs set-based inside the analytical store rather than per-series in
+>   Python, and operates under a per-run evaluation budget. Anything dropped by that budget
+>   is logged, never silently truncated.
 
 ### Insight structure: facts, correlations, hypotheses, questions
 
