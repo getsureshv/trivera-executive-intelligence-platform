@@ -1,0 +1,48 @@
+{
+  "realm": "eip-other",
+  "enabled": true,
+  "sslRequired": "none",
+  "accessTokenLifespan": 300,
+  "clients": [
+    {
+      "clientId": "eip-web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "eip-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "eip-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000001",
+      "username": "mallory",
+      "email": "mallory@elsewhere.invalid",
+      "firstName": "Mallory",
+      "lastName": "Elsewhere",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-only-password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

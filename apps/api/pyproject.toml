@@ -151,5 +151,6 @@ addopts = "-ra --strict-markers --strict-config"
 markers = [
     "integration: requires a live PostgreSQL (deselect with -m 'not integration')",
     "security: RELEASE-GATING tenant-isolation and authorization tests",
+    "oidc: requires the local Keycloak identity provider (compose profile 'oidc')",
 ]
 filterwarnings = ["error::DeprecationWarning"]

@@ -68,6 +68,46 @@ services:
       timeout: 3s
       retries: 20
 
+  # --- identity provider (profile: oidc) ----------------------------------
+
+  # A real OIDC provider for the integration suite. Phase 1A verified the OIDC
+  # adapter against in-process RSA keys and a local JWKS server, which proved
+  # the cryptography but not the protocol: discovery, realm-scoped issuers,
+  # Keycloak's `aud` behaviour, and live key rotation were all untested. That
+  # was gap G13.
+  #
+  # Not started by default — it costs ~15s and only one suite needs it:
+  #   docker compose -f infra/docker-compose.yml --profile oidc up -d --wait
+  keycloak:
+    profiles: ['oidc']
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: eip-keycloak
+    environment:
+      # Local development only. The admin API is used by the test suite to
+      # register signing keys and to force a rotation (ADR-010 §1).
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: local_dev_only
+      KC_HEALTH_ENABLED: 'true'
+      KC_HTTP_ENABLED: 'true'
+    command: ['start-dev', '--import-realm']
+    ports:
+      # 8081, not 8080: 8080 collides with almost everything.
+      - '${EIP_KEYCLOAK_HOST_PORT:-8081}:8080'
+    volumes:
+      # Imported on first start, in filename order. Realms are configuration,
+      # not clicks — a hand-configured IdP is a fixture nobody can recreate.
+      - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # The image ships neither curl nor wget. Bash's /dev/tcp is the approach
+      # Keycloak's own documentation recommends for exactly this reason.
+      test:
+        - 'CMD-SHELL'
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q 'UP'"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
   # --- application services (profile: app) --------------------------------
 
   # Named volumes are created root-owned, and Docker's propagation of image
@@ -118,6 +158,9 @@ services:
       # (ADR-015). A named volume, not a bind mount: these must not land in the
       # working tree.
       EIP_SECRET_STORE_PATH: /var/lib/eip/secrets
+      # Only the OIDC integration suite reads this. Inside the compose network
+      # the provider is reachable by service name; from the host it is 8081.
+      EIP_TEST_OIDC_BASE_URL: http://keycloak:8080
     ports:
       - '${EIP_API_HOST_PORT:-8000}:8000'
     volumes:

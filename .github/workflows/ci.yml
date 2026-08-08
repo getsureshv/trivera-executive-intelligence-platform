@@ -166,6 +166,59 @@ jobs:
         working-directory: apps/worker
         run: pytest -v
 
+  # ---------------------------------------------------------------------------
+  # RELEASE-GATING. Its own job because it needs a real identity provider, which
+  # the other suites do not. Phase 1A's OIDC tests ran entirely offline — that
+  # proved the cryptography and left the protocol untested (gap G13).
+  # ---------------------------------------------------------------------------
+  oidc-integration:
+    name: 'SECURITY: OIDC against a real identity provider'
+    runs-on: ubuntu-latest
+
+    env:
+      EIP_ENV: ci
+      EIP_LOG_FORMAT: json
+      EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@localhost:5432/eip
+      EIP_DB_PLATFORM_DSN: postgresql+asyncpg://eip_platform:local_dev_only@localhost:5432/eip
+      EIP_DB_MIGRATOR_DSN: postgresql+asyncpg://eip_migrator:local_dev_only@localhost:5432/eip
+      EIP_AUTH_DEV_SIGNING_SECRET: ci-only-not-a-real-secret-value-32-bytes
+      EIP_TEST_OIDC_BASE_URL: http://localhost:8081
+      # Turns "provider missing" from a skip into a failure. A green job whose
+      # security tests never ran is worse than a red one.
+      EIP_TEST_OIDC_REQUIRED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e "apps/api[postgres,dev]"
+
+      - name: Start PostgreSQL and Keycloak
+        # Compose rather than service containers: the Keycloak realms are
+        # imported from a mounted directory, and service containers cannot
+        # mount anything.
+        run: docker compose -f infra/docker-compose.yml --profile oidc up -d --wait postgres keycloak
+
+      - name: Run migrations
+        working-directory: apps/api
+        run: alembic upgrade head
+
+      - name: 'SECURITY: discovery, verification, rotation, membership binding'
+        working-directory: apps/api
+        run: pytest tests/security/test_oidc_keycloak.py -v
+
+      - name: Dump identity-provider logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml --profile oidc logs --tail 200 keycloak
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --profile oidc down -v
+
   web:
     name: Web — lint, types, tests, build
     runs-on: ubuntu-latest

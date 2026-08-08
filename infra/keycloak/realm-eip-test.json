@@ -1,0 +1,70 @@
+{
+  "realm": "eip-test",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "clients": [
+    {
+      "clientId": "eip-web",
+      "name": "TriVera EIP web client",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "eip-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "eip-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "username": "ada",
+      "email": "ada@acme.invalid",
+      "firstName": "Ada",
+      "lastName": "Acme",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-only-password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "aaaaaaaa-0000-4000-8000-000000000002",
+      "username": "orphan",
+      "email": "orphan@nowhere.invalid",
+      "firstName": "Orphan",
+      "lastName": "Nobody",
+      "enabled": true,
+      "emailVerified": true,
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-dev-only-password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
