@@ -523,7 +523,10 @@ Plus `cb5d75c`, a formatting-only fix for the one red CI run (see Task 2).
 
 ### Test results, as observed in CI
 
-Every figure below is from the final CI run's log, not a local run.
+Every figure below is read from the log of
+[run 31239982186](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31239982186),
+not from a local run. That is the last run to execute a code change; the commits
+after it are documentation only.
 
 | Suite | Result |
 | --- | --- |
@@ -569,8 +572,10 @@ backwards cannot ship.
 
 ### Final CI
 
-[Run 31239982186](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31239982186)
-— **success, all 7 jobs**:
+[Run 31240283082](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31240283082)
+on commit `8875441` — **success**. The job breakdown below is from
+[run 31239982186](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31239982186),
+the last run over a code change — **all 7 jobs**:
 
 | Job | Result |
 | --- | --- |
