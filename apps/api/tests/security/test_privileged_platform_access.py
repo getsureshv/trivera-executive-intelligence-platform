@@ -193,8 +193,7 @@ class TestElevationIsJustifiedAndAudited:
             ]
             assert all(event.resource_id == str(new_tenant_id) for event in events)
             assert all(
-                event.detail["elevation_reason"] == "onboarding a new customer"
-                for event in events
+                event.detail["elevation_reason"] == "onboarding a new customer" for event in events
             )
 
             # The tenant's credential reference is recorded — a pointer, never
