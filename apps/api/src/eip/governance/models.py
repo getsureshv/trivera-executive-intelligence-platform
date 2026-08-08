@@ -27,6 +27,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -63,7 +64,9 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    outcome: Mapped[str] = mapped_column(String(16), nullable=False, default="success")
+    outcome: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="success", server_default="success"
+    )
 
     # --- correlation (ADR-014 §2) ---
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -71,7 +74,9 @@ class AuditEvent(Base):
 
     #: Structured, redacted detail. Never secrets, never business values —
     #: `AuditService.record` passes everything through `redact()` first.
-    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    detail: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'")
+    )
 
     # --- tamper evidence ---
     prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -109,7 +114,9 @@ class OutboxMessage(Base):
     )
 
     topic: Mapped[str] = mapped_column(String(100), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'")
+    )
 
     #: Correlates the publish with the request that caused it.
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -118,7 +125,7 @@ class OutboxMessage(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    attempts: Mapped[int] = mapped_column(nullable=False, default=0)
+    attempts: Mapped[int] = mapped_column(nullable=False, default=0, server_default=text("0"))
     last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     __table_args__ = (
@@ -131,3 +138,37 @@ class OutboxMessage(Base):
         ),
         Index("ix_outbox_tenant", "tenant_id"),
     )
+
+
+class AuditChainHead(Base):
+    """Per-tenant audit checkpoint (migration 0002).
+
+    Records the highest sequence and hash ever written for a tenant. Deleting
+    audit events leaves this behind, which is what makes tail deletion,
+    truncation, and total erasure detectable — the hash chain alone cannot see
+    any of them, because the survivors form a valid chain
+    (:func:`eip.governance.audit.verify_chain`).
+
+    Two deliberate departures from the other models:
+
+    * **No foreign key to ``tenant``.** The checkpoint must outlive the tenant,
+      so that deleting the tenant row cannot also erase the proof that a chain
+      existed. Offboarding marks ``offboarded_at`` through a privileged
+      function instead.
+    * **No runtime write path.** Only the ``SECURITY DEFINER`` trigger created
+      in migration 0002 writes it; ``INSERT``/``UPDATE``/``DELETE`` are revoked
+      from both runtime roles. It is mapped here so the ORM and the migrated
+      schema agree — not because the application writes it.
+    """
+
+    __tablename__ = "audit_chain_head"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    last_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    #: Set by ``eip_audit_chain_offboard()`` so that sanctioned erasure is
+    #: distinguishable from tampering.
+    offboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

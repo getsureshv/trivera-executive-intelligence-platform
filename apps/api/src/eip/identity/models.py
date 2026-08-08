@@ -30,6 +30,7 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -53,7 +54,9 @@ class Tenant(Base):
     )
     slug: Mapped[str] = mapped_column(String(63), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active", server_default="active"
+    )
 
     #: The tenant's analytical namespace (ADR-003 §2). Derived from the tenant
     #: record by the provisioning subsystem, never from request input.
@@ -63,7 +66,10 @@ class Tenant(Base):
     #: can later be promoted to a dedicated instance as *configuration*
     #: (ADR-003 Tier 2) without a code change.
     isolation_mode: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="schema_per_tenant"
+        String(32),
+        nullable=False,
+        default="schema_per_tenant",
+        server_default="schema_per_tenant",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -98,8 +104,12 @@ class AppUser(Base):
     issuer: Mapped[str] = mapped_column(String(255), nullable=False)
     external_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(320), nullable=False)
-    display_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    display_name: Mapped[str] = mapped_column(
+        String(200), nullable=False, default="", server_default=""
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active", server_default="active"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -121,9 +131,13 @@ class Role(Base):
 
     code: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False)
-    description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    description: Mapped[str] = mapped_column(
+        String(500), nullable=False, default="", server_default=""
+    )
     #: Platform-staff roles are never assignable inside a tenant.
-    is_platform_role: Mapped[bool] = mapped_column(nullable=False, default=False)
+    is_platform_role: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=false()
+    )
 
 
 class RoleCapability(Base):
@@ -159,7 +173,9 @@ class Membership(Base):
     role_code: Mapped[str] = mapped_column(
         ForeignKey("role.code", ondelete="RESTRICT"), nullable=False
     )
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="active", server_default="active"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

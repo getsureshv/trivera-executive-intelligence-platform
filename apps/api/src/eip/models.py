@@ -24,11 +24,12 @@ Anything that touches an ORM model needs the whole registry, not part of it.
 
 from __future__ import annotations
 
-from eip.governance.models import AuditEvent, OutboxMessage
+from eip.governance.models import AuditChainHead, AuditEvent, OutboxMessage
 from eip.identity.models import AppUser, Membership, Role, RoleCapability, Tenant
 
 __all__ = [
     "AppUser",
+    "AuditChainHead",
     "AuditEvent",
     "Membership",
     "OutboxMessage",
