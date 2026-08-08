@@ -13,9 +13,12 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from eip.dataplane.credentials import AnalyticalCredentialProvider
 from eip.dataplane.interfaces import TenantDataPlane
+from eip.dataplane.pool import TenantPoolRegistry
 from eip.dataplane.schema_per_tenant import SchemaPerTenantDataPlane
 from eip.platform.errors import NotImplementedModeError
+from eip.platform.secrets import SecretStore
 from eip.platform.settings import IsolationMode, Settings
 
 #: Modes declared by ADR-003 but not built. Listed explicitly so the error
@@ -30,7 +33,37 @@ DECLARED_BUT_UNIMPLEMENTED: frozenset[IsolationMode] = frozenset(
 )
 
 
-def build_data_plane(settings: Settings, platform_engine: AsyncEngine) -> TenantDataPlane:
+def build_credential_provider(
+    settings: Settings, secret_store: SecretStore
+) -> AnalyticalCredentialProvider:
+    """Build the provider that turns a SecretRef into a tenant connection URL."""
+    return AnalyticalCredentialProvider(
+        secret_store=secret_store,
+        # Host, port, and database come from the application DSN; only the user
+        # and password differ per tenant, so a tenant URL cannot point at a
+        # different server.
+        template_dsn=settings.db_app_dsn,
+    )
+
+
+def build_pool_registry(
+    settings: Settings, credentials: AnalyticalCredentialProvider
+) -> TenantPoolRegistry:
+    """Build the bounded, LRU-evicting per-tenant pool registry."""
+    return TenantPoolRegistry(
+        credentials=credentials,
+        max_tenants=settings.analytical_pool_max_tenants,
+        pool_size=settings.analytical_pool_size,
+        max_overflow=settings.analytical_pool_max_overflow,
+        idle_ttl_seconds=settings.analytical_pool_idle_ttl_seconds,
+    )
+
+
+def build_data_plane(
+    settings: Settings,
+    platform_engine: AsyncEngine,
+    credentials: AnalyticalCredentialProvider,
+) -> TenantDataPlane:
     """Return the data plane for the configured isolation mode."""
     mode = settings.data_plane_mode
 
@@ -38,6 +71,7 @@ def build_data_plane(settings: Settings, platform_engine: AsyncEngine) -> Tenant
         return SchemaPerTenantDataPlane(
             platform_engine=platform_engine,
             schema_prefix=settings.data_plane_schema_prefix,
+            credentials=credentials,
         )
 
     if mode in DECLARED_BUT_UNIMPLEMENTED:

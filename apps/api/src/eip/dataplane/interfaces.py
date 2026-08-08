@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol, final, runtime_checkable
 
+from eip.platform.secrets import SecretRef
 from eip.platform.settings import IsolationMode
 
 
@@ -76,11 +77,14 @@ class DataPlaneHandle:
     #: Backend-specific location: a schema name today; a database or catalog
     #: under other modes. Callers must treat this as opaque and use qualify().
     namespace: str
-    #: The database role that holds privileges on ``namespace`` and on nothing
-    #: else. ``eip.platform.db.analytical_session`` assumes it for the duration
-    #: of one transaction. Empty only for modes where role switching does not
-    #: apply.
+    #: The tenant's own database **login** role. It holds privileges on
+    #: ``namespace`` and on nothing else, and no other role is a member of it.
+    #: Connections authenticate *as* this role; nothing assumes it.
     role: str = ""
+    #: Pointer to that role's password in the SecretStore. A reference, never a
+    #: value — so a handle can be logged, cached, or passed through a job
+    #: payload without disclosing a credential (ADR-015).
+    secret_ref: SecretRef | None = None
 
     def qualify(self, object_name: str) -> str:
         """Return a fully-qualified, quoted identifier for ``object_name``."""

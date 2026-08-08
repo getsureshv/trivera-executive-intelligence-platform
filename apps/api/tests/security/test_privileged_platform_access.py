@@ -188,6 +188,21 @@ class TestElevationIsJustifiedAndAudited:
             assert events[0].resource_id == str(new_tenant_id)
             assert events[0].detail["elevation_reason"] == "onboarding a new customer"
 
+            # The tenant's credential reference is recorded — a pointer, never
+            # a value (ADR-015).
+            credential = (
+                await session.execute(
+                    text(
+                        "SELECT analytical_role, analytical_secret_name, "
+                        "analytical_secret_version FROM tenant WHERE id = :id"
+                    ),
+                    {"id": new_tenant_id},
+                )
+            ).one()
+            assert credential.analytical_role
+            assert credential.analytical_secret_name == "analytical-db-password"
+            assert credential.analytical_secret_version
+
             # And the tenant's analytical namespace really was provisioned.
             schema_exists = (
                 await session.execute(

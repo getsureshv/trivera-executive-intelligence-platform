@@ -18,7 +18,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -179,6 +179,7 @@ class TenantProvisioningService:
             name=name,
             status="active",
             analytical_schema=handle.namespace,
+            analytical_role=handle.role,
             isolation_mode=self._data_plane.mode.value,
         )
         session.add(tenant)
@@ -207,9 +208,25 @@ class TenantProvisioningService:
             isolation_mode=tenant.isolation_mode,
         )
 
-    async def provision_data_plane(self, tenant: TenantSummary) -> None:
-        """Create the tenant's analytical storage. Idempotent."""
-        await self._data_plane.provision(TenantRef(tenant_id=tenant.id, slug=tenant.slug))
+    async def provision_data_plane(self, session: AsyncSession, tenant: TenantSummary) -> None:
+        """Create the tenant's analytical storage and record its credential.
+
+        Provisioning generates the tenant's database password and stores it in
+        the ``SecretStore``; what lands on the tenant row is the *reference*
+        returned here — a logical name and a version, never a value (ADR-015).
+        Without persisting it, the credential would exist but be unreachable.
+        """
+        handle = await self._data_plane.provision(TenantRef(tenant_id=tenant.id, slug=tenant.slug))
+        if handle.secret_ref is not None:
+            await session.execute(
+                update(Tenant)
+                .where(Tenant.id == tenant.id)
+                .values(
+                    analytical_role=handle.role,
+                    analytical_secret_name=handle.secret_ref.logical_name,
+                    analytical_secret_version=handle.secret_ref.version,
+                )
+            )
 
     async def add_membership(
         self,

@@ -70,6 +70,20 @@ services:
 
   # --- application services (profile: app) --------------------------------
 
+  # Named volumes are created root-owned, and Docker's propagation of image
+  # directory ownership is not reliable across platforms. The API and worker run
+  # as a non-root user (uid 10001) and must write per-tenant credentials, so the
+  # volume's ownership is set explicitly by a one-shot root container rather
+  # than left to chance.
+  secrets-init:
+    profiles: ['app']
+    image: alpine:3.20
+    user: root
+    volumes:
+      - eip_secrets:/data
+    command: sh -c "mkdir -p /data && chown -R 10001:10001 /data && chmod 700 /data"
+    restart: 'no'
+
   migrate:
     profiles: ['app']
     build:
@@ -100,6 +114,10 @@ services:
       EIP_REDIS_URL: redis://redis:6379/0
       EIP_CORS_ORIGINS: http://localhost:3000
       EIP_AUTH_DEV_SIGNING_SECRET: local-dev-only-not-a-real-secret-change-me
+      # Per-tenant analytical passwords live here, never in the database
+      # (ADR-015). A named volume, not a bind mount: these must not land in the
+      # working tree.
+      EIP_SECRET_STORE_PATH: /var/lib/eip/secrets
     ports:
       - '${EIP_API_HOST_PORT:-8000}:8000'
     volumes:
@@ -112,10 +130,13 @@ services:
       #     run --rm api python -m pytest tests -q
       - ../apps/api/tests:/app/apps/api/tests:ro
       - ../apps/api/pyproject.toml:/app/apps/api/pyproject.toml:ro
+      - eip_secrets:/var/lib/eip/secrets
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      secrets-init:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -139,6 +160,7 @@ services:
       EIP_LOG_FORMAT: console
       EIP_SERVICE_NAME: eip-worker
       EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@postgres:5432/eip
+      EIP_SECRET_STORE_PATH: /var/lib/eip/secrets
       # NOTE: EIP_DB_PLATFORM_DSN is deliberately NOT supplied to the worker.
       # An ordinary worker must not hold a reusable BYPASSRLS credential
       # (ADR-009; Phase 1A finding 3). It reaches cross-tenant information only
@@ -149,12 +171,15 @@ services:
     volumes:
       - ../apps/api/src:/app/apps/api/src:ro
       - ../apps/worker/src:/app/apps/worker/src:ro
+      - eip_secrets:/var/lib/eip/secrets
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       migrate:
+        condition: service_completed_successfully
+      secrets-init:
         condition: service_completed_successfully
     healthcheck:
       test:
@@ -170,3 +195,7 @@ services:
 volumes:
   eip_pgdata:
     name: eip_pgdata
+  # Per-tenant analytical credentials. A volume rather than a bind mount so
+  # secrets never appear in the working tree or in a build context.
+  eip_secrets:
+    name: eip_secrets

@@ -257,6 +257,7 @@ class TestDataPlaneAbstraction:
         plane = SchemaPerTenantDataPlane(
             platform_engine=None,  # type: ignore[arg-type]
             schema_prefix="tenant_",
+            credentials=None,  # type: ignore[arg-type]
         )
         tenant_id = uuid.uuid4()
         first = plane.namespace_for(TenantRef(tenant_id=tenant_id, slug="original"))
@@ -274,7 +275,7 @@ class TestDataPlaneAbstraction:
         ):
             settings = Settings(env=Environment.CI, data_plane_mode=mode)
             with pytest.raises(NotImplementedModeError):
-                build_data_plane(settings, None)  # type: ignore[arg-type]
+                build_data_plane(settings, None, None)  # type: ignore[arg-type]
 
 
 class TestErrorTaxonomy:

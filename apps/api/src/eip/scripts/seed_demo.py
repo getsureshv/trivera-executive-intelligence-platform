@@ -24,12 +24,13 @@ from dataclasses import dataclass
 
 from sqlalchemy import select, text
 
-from eip.dataplane.registry import build_data_plane
+from eip.dataplane.registry import build_credential_provider, build_data_plane
 from eip.identity.models import AppUser, Membership, Tenant
 from eip.identity.service import TenantProvisioningService
 from eip.platform.context import ActorType, PlatformContext, Principal, RoleCode
 from eip.platform.db import create_engines, create_session_factory, platform_session
 from eip.platform.logging import configure_logging, get_logger, new_trace_id
+from eip.platform.secretstore import build_secret_store
 from eip.platform.settings import get_settings
 
 _log = get_logger("scripts.seed_demo")
@@ -100,7 +101,8 @@ async def seed() -> None:
 
     engines = create_engines(settings)
     platform_factory = create_session_factory(engines.platform)
-    data_plane = build_data_plane(settings, engines.platform)
+    credentials = build_credential_provider(settings, build_secret_store(settings))
+    data_plane = build_data_plane(settings, engines.platform, credentials)
     service = TenantProvisioningService(data_plane)
 
     trace_id = new_trace_id()
@@ -145,7 +147,7 @@ async def seed() -> None:
                     tenant_id = already
                 else:
                     tenant = await service.create_tenant(session, context, slug=slug, name=name)
-                    await service.provision_data_plane(tenant)
+                    await service.provision_data_plane(session, tenant)
                     tenant_id = tenant.id
 
                 member_id = await _upsert_user(session, settings.auth_issuer, member)

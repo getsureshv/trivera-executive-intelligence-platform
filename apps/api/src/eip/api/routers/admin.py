@@ -88,7 +88,7 @@ async def create_tenant(
     # DDL runs after the control-plane transaction. Provisioning is idempotent,
     # so a crash between the two leaves a tenant whose plane can simply be
     # re-provisioned — the failure mode is a retry, not corruption.
-    await service.provision_data_plane(tenant)
+    await service.provision_data_plane(session, tenant)
 
     _log.warning(
         "admin.tenant_created",

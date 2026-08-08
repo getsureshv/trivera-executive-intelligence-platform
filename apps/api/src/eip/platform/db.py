@@ -63,6 +63,11 @@ TENANT_SETTING: Final = "app.tenant_id"
 #: with BYPASSRLS, which is precisely what must not happen.
 PRINCIPAL_SETTING: Final = "app.user_id"
 
+#: Prefix of the per-tenant analytical login roles. Defined here as well as in
+#: the data plane so the startup assertion below does not have to import a
+#: bounded context (ADR-001).
+TENANT_ROLE_PREFIX: Final = "eip_t_"
+
 #: Tables that are deliberately global and therefore exempt from RLS.
 #: This list is asserted against ``pg_policies`` by a test, so adding a
 #: tenant-scoped table without a policy fails the build (ADR-003 Risks).
@@ -176,11 +181,11 @@ async def assert_runtime_role_is_constrained(engine: AsyncEngine) -> None:
 
         if inherits:
             msg = (
-                f"Runtime database role {rolname!r} has INHERIT. The analytical data plane "
-                "makes this role a member of every per-tenant role so it can SET ROLE into "
-                "exactly one of them; with INHERIT it would instead hold the union of every "
-                "tenant's privileges, which defeats analytical isolation entirely. "
-                "Create it NOINHERIT (ADR-003 §2)."
+                f"Runtime database role {rolname!r} has INHERIT. It must hold no privilege "
+                "through membership: analytical access uses each tenant's own login "
+                "credential, and this role is a member of nothing. NOINHERIT keeps a "
+                "mistakenly granted membership from silently conferring privileges "
+                "(ADR-003 §2)."
             )
             raise ConfigurationError(msg)
 
@@ -218,6 +223,33 @@ async def assert_runtime_role_is_constrained(engine: AsyncEngine) -> None:
                 f"Runtime database role {rolname!r} owns {owned} tenant-scoped table(s). "
                 "Table owners are exempt from RLS unless FORCE is set; the runtime role "
                 "must not be the owner (ADR-003)."
+            )
+            raise ConfigurationError(msg)
+
+        # The assertion that closes G10. Analytical isolation now rests on each
+        # tenant holding its own login credential; if the runtime role were a
+        # member of any tenant role, it could assume that tenant regardless of
+        # what the application intended — which is exactly the capability this
+        # design removed.
+        assumable = (
+            await conn.execute(
+                text(
+                    "SELECT count(*) "
+                    "FROM pg_auth_members m "
+                    "JOIN pg_roles r ON r.oid = m.roleid "
+                    "JOIN pg_roles grantee ON grantee.oid = m.member "
+                    "WHERE grantee.rolname = current_user "
+                    "AND r.rolname LIKE :prefix"
+                ),
+                {"prefix": f"{TENANT_ROLE_PREFIX}%"},
+            )
+        ).scalar_one()
+        if assumable:
+            msg = (
+                f"Runtime database role {rolname!r} is a member of {assumable} per-tenant "
+                "analytical role(s). It could therefore assume any of those tenants. "
+                "Analytical access must use the tenant's own credential, never an assumed "
+                "role (ADR-003 §2; Phase 1A finding G10)."
             )
             raise ConfigurationError(msg)
 

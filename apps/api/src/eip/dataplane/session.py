@@ -1,57 +1,60 @@
 """Analytical session — the only path to a tenant's analytical data.
 
-Lives in ``eip.dataplane`` rather than ``eip.platform`` because it depends on a
-``DataPlaneHandle``, and ``eip.platform`` may not depend on a bounded context
-(ADR-001; enforced by ``tests/architecture/test_module_boundaries.py``).
+**There is no ``SET ROLE`` here, and none anywhere in the codebase.** That
+mechanism is gone, and an architecture test asserts it stays gone.
 
-**This module contains the only ``SET ROLE`` in the codebase.** An architecture
-test asserts that, because the isolation guarantee of the analytical plane rests
-entirely on the role a transaction assumes.
+The previous design gave every process one shared credential that was a member
+of every per-tenant role and switched into one of them per transaction. It was
+enforced by PostgreSQL *once the switch had happened*, but the switch was a
+choice the application made. Code that named the wrong tenant would have been
+obeyed. That was finding G10.
+
+Now a tenant's analytical session comes from a pool authenticated as **that
+tenant's own database role, with that tenant's own password**. The connection
+has no privilege on any other schema and no role it could assume. A statement
+naming tenant B while processing tenant A is refused by PostgreSQL because the
+connection is not tenant B and has no way to become tenant B — not because a
+guard noticed.
+
+The handle/context match check below is retained, but its role has changed:
+before, it was the thing standing between a coding error and a cross-tenant
+read. Now it is an early, legible failure for a mistake the database would
+refuse anyway.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Final
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from eip.dataplane.credentials import AnalyticalCredential
 from eip.dataplane.interfaces import DataPlaneHandle
+from eip.dataplane.pool import TenantPoolRegistry
 from eip.platform.context import TenantContext
-from eip.platform.db import TENANT_SETTING
 from eip.platform.errors import ConfigurationError
 from eip.platform.logging import get_logger
 
 _log = get_logger("dataplane.session")
 
-_SAFE_ROLE: Final = re.compile(r"^[a-z_][a-z0-9_]*$")
-
 
 @asynccontextmanager
 async def analytical_session(
-    factory: async_sessionmaker[AsyncSession],
+    registry: TenantPoolRegistry,
     context: TenantContext,
     handle: DataPlaneHandle,
 ) -> AsyncIterator[AsyncSession]:
-    """Open a transaction that assumes the tenant's **analytical role**.
+    """Open a transaction on the tenant's **own** analytical connection.
 
-    Isolation here is enforced by PostgreSQL privileges, not by our SQL. After
-    the role switch, ``current_user`` is a role holding ``USAGE`` on exactly one
-    schema, so a statement naming any other tenant's schema is refused with
-    ``permission denied`` regardless of how that statement was constructed
-    (ADR-003 §2). ``SET LOCAL`` is transaction-scoped, so the assumed role
-    cannot survive the connection returning to the pool.
+    Isolation is a property of the credential, not of the statement. There is
+    nothing to set, nothing to reset, and nothing that could leak across a
+    pooled checkout: the connection can only ever authenticate as one tenant.
 
-    ``app.tenant_id`` is set as well, so any control-plane table touched inside
-    the same transaction stays RLS-scoped — defence in depth across both planes.
-
-    The handle's tenant must match the context's. Both are constructed from the
-    same authenticated ``TenantRef``; a mismatch means two different tenants
-    were combined somewhere upstream, which is a programming error serious
-    enough to refuse rather than reconcile.
+    The handle must match the request context. Both derive from the same
+    authenticated ``TenantRef``; a mismatch means two tenants were combined
+    upstream, which is a programming error worth refusing rather than
+    reconciling — even though the database would refuse it too.
     """
     if handle.tenant_id != context.tenant_id:
         msg = (
@@ -61,25 +64,20 @@ async def analytical_session(
         )
         raise ConfigurationError(msg)
 
-    if not handle.role:
+    if not handle.role or handle.secret_ref is None:
         msg = (
-            f"Data-plane handle for tenant {handle.tenant_id} carries no analytical role. "
-            "Isolation would rest on schema qualification alone, which is not enforcement "
-            "(ADR-003 §2)."
+            f"Data-plane handle for tenant {handle.tenant_id} carries no analytical "
+            "credential. Isolation would rest on schema qualification alone, which is "
+            "not enforcement (ADR-003 §2)."
         )
         raise ConfigurationError(msg)
 
-    if not _SAFE_ROLE.match(handle.role):  # pragma: no cover - defence in depth
-        msg = f"Unsafe analytical role name: {handle.role!r}"
-        raise ConfigurationError(msg)
+    credential = AnalyticalCredential(
+        tenant_id=handle.tenant_id,
+        role=handle.role,
+        secret_ref=handle.secret_ref,
+    )
+    sessions = await registry.sessions_for(credential)
 
-    async with factory() as session, session.begin():
-        await session.execute(
-            text(f"SELECT set_config('{TENANT_SETTING}', :tenant_id, true)"),
-            {"tenant_id": str(context.tenant_id)},
-        )
-        # PostgreSQL accepts no bind parameter for a role name. The value is
-        # regex-validated above and derived from a UUID in an authenticated
-        # tenant record — never from request input.
-        await session.execute(text(f'SET LOCAL ROLE "{handle.role}"'))
+    async with sessions() as session, session.begin():
         yield session

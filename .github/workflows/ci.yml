@@ -142,9 +142,9 @@ jobs:
         working-directory: apps/api
         run: pytest tests/security/test_tenant_isolation.py -v
 
-      - name: 'SECURITY: analytical data-plane isolation'
+      - name: 'SECURITY: per-tenant analytical credentials (G10)'
         working-directory: apps/api
-        run: pytest tests/security/test_analytical_isolation.py -v
+        run: pytest tests/security/test_analytical_credentials.py -v
 
       - name: 'SECURITY: audit tamper evidence'
         working-directory: apps/api

@@ -161,19 +161,19 @@ def test_contexts_do_not_import_api_internals(context: str) -> None:
     assert not violations, f"'{context}' must not import eip.api:\n  " + "\n  ".join(violations)
 
 
-def test_set_role_is_executed_in_exactly_one_module() -> None:
-    """Analytical isolation rests entirely on the role a transaction assumes.
+def test_set_role_is_never_executed() -> None:
+    """The shared ``SET ROLE`` mechanism is gone and must stay gone.
 
-    ``eip_app`` is a member of every per-tenant role, so it *can* assume any of
-    them; what makes that safe is that exactly one function ever issues the
-    switch, and that function validates the handle against the request's tenant
-    context (ADR-003 §2, ADR-016). A second call site would reintroduce the
-    residual risk this design deliberately confines to one reviewable place.
+    Analytical isolation previously depended on one shared credential assuming a
+    per-tenant role. That was enforced by PostgreSQL only *after* the switch,
+    and the switch was an application decision — so code naming the wrong tenant
+    would have been obeyed (finding G10).
 
-    The pattern matches the *executable* form — ``SET [LOCAL] ROLE "`` — because
-    the identifier is always quoted when interpolated. Prose in docstrings
-    discusses ``SET LOCAL ROLE`` freely and must not trip the check; a test that
-    flagged documentation would be abandoned within a week.
+    Each tenant now connects with its own credential. There is no role to
+    assume, and ``eip_app`` is a member of nothing, so a reintroduced ``SET
+    ROLE`` would fail at runtime — but it would also signal that someone was
+    trying to rebuild the shared-credential design, which is why this fails the
+    build instead.
     """
     executable = re.compile(r'SET\s+(?:LOCAL\s+)?ROLE\s+"')
     offenders = sorted(
@@ -181,6 +181,7 @@ def test_set_role_is_executed_in_exactly_one_module() -> None:
         for path in _iter_modules()
         if executable.search(path.read_text(encoding="utf-8"))
     )
-    assert offenders == ["dataplane/session.py"], (
-        "SET ROLE must be executed only in eip.dataplane.session; found in: " + ", ".join(offenders)
+    assert offenders == [], (
+        "SET ROLE must not appear in application code; analytical access uses each "
+        "tenant's own credential (ADR-003 §2). Found in: " + ", ".join(offenders)
     )

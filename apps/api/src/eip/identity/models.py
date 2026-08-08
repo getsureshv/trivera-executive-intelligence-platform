@@ -72,6 +72,16 @@ class Tenant(Base):
         server_default="schema_per_tenant",
     )
 
+    #: The tenant's dedicated analytical login role. Nothing is a member of it;
+    #: connections authenticate as it directly (ADR-003 §2).
+    analytical_role: Mapped[str | None] = mapped_column(String(63), nullable=True)
+
+    #: Pointer to that role's password in the SecretStore — a logical name and a
+    #: version, never a value. A dump of this table contains no credential
+    #: material (ADR-015).
+    analytical_secret_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    analytical_secret_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

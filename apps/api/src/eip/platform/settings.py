@@ -95,6 +95,21 @@ class Settings(BaseSettings):
     data_plane_mode: IsolationMode = IsolationMode.SCHEMA_PER_TENANT
     data_plane_schema_prefix: str = "tenant_"
 
+    # --- secrets (ADR-015) -------------------------------------------------
+    #: Root for the filesystem secret store used in local/ci/dev. Must be
+    #: outside the repository; `build_secret_store` refuses to select this
+    #: backend in a production-like environment at all.
+    secret_store_path: str = "./.secrets"  # noqa: S105 - a directory path
+
+    # --- analytical connection pools (ADR-003 §2) --------------------------
+    #: One pool per tenant, each authenticated as that tenant's own database
+    #: role. Bounded because PostgreSQL's max_connections is a hard cluster
+    #: limit, and exhausting it takes every tenant down at once.
+    analytical_pool_max_tenants: Annotated[int, Field(ge=1, le=1000)] = 50
+    analytical_pool_size: Annotated[int, Field(ge=1, le=50)] = 2
+    analytical_pool_max_overflow: Annotated[int, Field(ge=0, le=50)] = 2
+    analytical_pool_idle_ttl_seconds: Annotated[float, Field(gt=0, le=86_400)] = 300.0
+
     # --- observability (ADR-014) ------------------------------------------
     otel_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"

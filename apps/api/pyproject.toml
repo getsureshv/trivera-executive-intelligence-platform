@@ -95,7 +95,7 @@ ignore = [
 # the entire point, and parameterising those statements would defeat the test.
 "tests/**" = ["S105", "S106", "S107", "S608"]
 # Alembic templates are generated.
-"migrations/versions/*" = ["E501"]
+"migrations/versions/*" = ["E501", "S608"]
 # This module provisions per-tenant schemas and roles. PostgreSQL accepts no
 # bind parameter for an identifier in DDL, so every statement here interpolates.
 # The safety argument is structural rather than per-line: identifiers come from

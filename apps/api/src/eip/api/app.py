@@ -31,7 +31,11 @@ from eip.api.middleware import (
     handle_unexpected_error,
 )
 from eip.api.routers import admin, dev_auth, health, tenancy
-from eip.dataplane.registry import build_data_plane
+from eip.dataplane.registry import (
+    build_credential_provider,
+    build_data_plane,
+    build_pool_registry,
+)
 from eip.identity.oidc import (
     assert_algorithms_are_asymmetric,
     build_verifier,
@@ -45,6 +49,7 @@ from eip.platform.db import (
 )
 from eip.platform.errors import EipError
 from eip.platform.logging import configure_logging, get_logger
+from eip.platform.secretstore import build_secret_store
 from eip.platform.settings import Settings, get_settings
 from eip.platform.telemetry import configure_telemetry, instrument_app
 
@@ -60,7 +65,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engines = engines
     app.state.session_factory = create_session_factory(engines.app)
     app.state.platform_session_factory = create_session_factory(engines.platform)
-    app.state.data_plane = build_data_plane(settings, engines.platform)
+    # Per-tenant analytical credentials (ADR-003 §2, ADR-015). The secret store
+    # is selected first: in a production-like environment there is no adapter,
+    # so the process fails here rather than at the first analytical query.
+    secret_store = build_secret_store(settings)
+    credentials = build_credential_provider(settings, secret_store)
+    app.state.secret_store = secret_store
+    app.state.analytical_pools = build_pool_registry(settings, credentials)
+    app.state.data_plane = build_data_plane(settings, engines.platform, credentials)
 
     # Isolation invariants. These raise ConfigurationError and abort startup.
     await assert_runtime_role_is_constrained(engines.app)
@@ -84,6 +96,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await app.state.analytical_pools.close()
         await engines.app.dispose()
         await engines.platform.dispose()
         _log.info("api.stopped")
