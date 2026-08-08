@@ -6,6 +6,7 @@ from eip.connectivity.egress import (
     EgressDecision,
     EgressValidator,
 )
+from eip.connectivity.postgresql import PostgreSQLConfig, PostgreSQLConnector
 from eip.connectivity.protocol import Connector
 
 __all__ = [
@@ -14,4 +15,6 @@ __all__ = [
     "DnsResolution",
     "EgressDecision",
     "EgressValidator",
+    "PostgreSQLConfig",
+    "PostgreSQLConnector",
 ]
