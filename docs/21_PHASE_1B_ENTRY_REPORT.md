@@ -1,7 +1,7 @@
 # 21 — Phase 1B Entry Tasks Report
 
 Date: 2026-08-08
-Status: **In progress** — Tasks 1 and 2 complete, Task 3 outstanding.
+Status: **COMPLETE — PASS.** All three entry tasks done. See *Completion*.
 Governed by: [ADR-001](adr/ADR-001-repository-architecture.md) …
 [ADR-016](adr/ADR-016-bounded-context-enforcement.md), and the product-owner
 decisions in [`20`](20_PRODUCT_OWNER_DECISIONS.md).
@@ -332,8 +332,15 @@ with the test for outbox rows. Observed once in ten runs; 5/5 stable with the
 container stopped, which is also the CI arrangement. This is the environment,
 not the code, and it does not affect CI.
 
-Commit hash and CI result: recorded in the Task 3 update, per the convention
-above.
+**Commit `d7e2518`**, plus `cb5d75c` (see below). CI
+[run 31239982186](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31239982186)
+— **success**.
+
+The first push of this task went red, and it is worth recording why: the static
+job failed on **one file's formatting**. I ran the formatter, then made a
+further edit to a test, then did not re-run it. The check happened before the
+last change rather than after it. Fixed in `cb5d75c`; no code was wrong, and
+the process was.
 
 ### Gaps remaining after Task 2
 
@@ -348,4 +355,290 @@ above.
 
 ## Task 3 — First browser end-to-end security test
 
-Not started.
+**Outcome: PASS.**
+
+### What was actually missing
+
+ADR-001 called for `tests/e2e`. It did not exist, and the Phase 1A report said
+so — gap G3. Every isolation assertion the project had was made by a test client
+that could not send a stray header, follow a redirect it was not expecting, or
+render a page containing the wrong organization's name. The guarantee was well
+evidenced one layer below where a customer actually experiences it.
+
+### The flow
+
+Eleven tests, one browser, the real stack, two real seeded tenants. Tenant B's
+identifiers are resolved from a **real session** through the API and then used
+as the attack payload — never a placeholder, because a placeholder cannot prove
+that a real identifier fails.
+
+| Required | Test |
+| --- | --- |
+| Sign in through the local identity path | every test; `signInAs` drives the actual form |
+| Load the application as tenant A | `the organization context shown is tenant A, resolved server-side` |
+| Tenant A identity is displayed | same — name, slug, id, and signed-in email |
+| Readiness information is displayed | `readiness information is displayed` |
+| Tenant-header manipulation | `a forged X-Tenant-Id header changes nothing` |
+| URL manipulation | `tenant identifiers in the URL change nothing` (four variants) |
+| No tenant B identifier or data appears | `expectNoTraceOfTenantB`, called from every manipulation |
+| Unauthenticated access returns to sign-in | `reaching the application without a session returns to sign-in`, `signing out ends the session…`, `the API refuses an unauthenticated request` |
+| Diagnostics without tokens | `redaction removes credentials from captured diagnostics` |
+
+Two more than the brief asked for, because they were cheap and they matter:
+
+- **`the session token is unreachable from browser JavaScript`** — the premise
+  everything else rests on. If a page script could read the token, isolation in
+  the browser would be a rendering convention. It also checks the cookie *is*
+  present and `HttpOnly`, so it cannot pass on an unauthenticated page.
+- **`a token naming tenant B grants nothing`** — the most interesting result
+  here. The dev issuer *mints* the token: `tid` is a request, and refusing it at
+  minting time would move the decision to the wrong place. Membership answers no,
+  so the browser ends up holding a cryptographically valid token that opens
+  nothing, and the test proves it stays inert across a fresh navigation.
+
+`tenant B's own session sees tenant B and not tenant A` is the negative control
+for the whole file. Without it, "tenant B's data is absent" would be trivially
+true and the suite would be testing nothing.
+
+### What the first run taught
+
+The suite failed six ways on its first execution, and two of those were the
+tests being wrong rather than the application:
+
+- **Next.js echoes the request URL into its RSC flight payload.** An identifier
+  the *attack itself* put in the query string comes back in the response. That
+  is the attacker's own input, not a disclosure — but a naive "tenant B's id
+  appears nowhere in the DOM" assertion fails on a page that leaked nothing at
+  all, and the tempting fix is to weaken the test until it passes.
+
+  `expectNoTraceOfTenantB` draws the line explicitly instead. Values the attack
+  supplied are checked against **rendered text** (they must never be displayed);
+  everything else — notably tenant B's display name, which no attempt ever
+  supplies — is checked against the **entire response, script payloads
+  included**. `supplied` is passed per attempt, so widening it is a visible diff
+  rather than a quiet relaxation.
+
+- **A first draft of the helper iterated every field of the tenant object**,
+  which swept in `status: "active"` — shared by every tenant, present on tenant
+  A's own page. An assertion that fails on a page leaking nothing is worse than
+  no assertion, because the only way to fix it is to make it weaker.
+
+The other four were `loading.tsx` rendering sections with identical headings
+(Playwright's strict mode correctly refused to guess between them), and the
+sign-out control not existing.
+
+### Diagnostics are built, not inherited
+
+Playwright's trace and video are **off**. Both are genuinely useful and both
+record complete request headers — `Authorization` and the session cookie. A CI
+artefact containing a bearer token is a credential leak with a download link,
+and it would be one nobody looked at until it mattered. `storageState` is never
+written for the same reason: the usual sign-in-once pattern would leave a live
+token in a file in the working tree.
+
+`support/diagnostics.ts` captures the final URL, page title, console output, a
+redacted DOM, and cookie **names only**. It has its own test, which feeds it a
+JWT in four shapes — bearer header, cookie, JSON field, query parameter — and
+also checks an ordinary error message survives unmangled. Redaction that
+destroys every message is its own defect.
+
+### One thing added beyond tests
+
+The sign-out control. `signOut` was written in Phase 1A and nothing rendered it
+— dead code on one side, a missing control on the other. It is a plain form
+posting to the server action, so ending a session does not depend on a bundle
+loading.
+
+### Changed files
+
+| File | Change |
+| --- | --- |
+| `tests/e2e/specs/tenant-isolation.spec.ts` | **new** — 11 release-gating browser tests |
+| `tests/e2e/support/diagnostics.ts` | **new** — redaction and failure capture |
+| `tests/e2e/support/fixtures.ts` | **new** — tenant resolution and sign-in helper |
+| `tests/e2e/playwright.config.ts` | **new** — trace/video off, no retries, no `storageState` |
+| `tests/e2e/package.json`, `tsconfig.json`, `eslint.config.mjs` | **new** — workspace member |
+| `apps/web/src/app/app/layout.tsx` | **new** — the sign-out control |
+| `apps/web/src/app/globals.css` | styles for it |
+| `pnpm-workspace.yaml`, `pnpm-lock.yaml` | registers `tests/e2e` |
+| `.gitignore` | Playwright output |
+| `.github/workflows/ci.yml` | new release-gating job |
+
+### CI
+
+New job **`SECURITY: tenant isolation in the browser`**. It starts the full
+stack, seeds **two** organizations (isolation cannot be observed with one),
+builds and starts the web application, and runs the suite. Failure diagnostics
+upload as an artefact — safe to publish, because of the redaction above.
+
+**Commit `cc29dfa`.** CI
+[run 31239982186](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31239982186)
+— **success, all 7 jobs**, including this one on its first execution.
+
+### Gaps remaining after Task 3
+
+| Gap | Status |
+| --- | --- |
+| **G3** | **Closed.** The browser harness exists and is release-gating. |
+| **G12** | **Partly closed.** 7 unit tests plus 11 browser tests now cover the authenticated flow end to end. Individual component and route unit tests remain absent; the browser suite covers the paths that matter for isolation. |
+| One browser only | Chromium. Firefox and WebKit are one config line away, and nothing here is engine-specific, but only Chromium has been observed. |
+| Authorization-code flow | Still unexercised. The browser signs in through the local identity path, so redirect handling, PKCE, and state/nonce are untested. This is the same gap noted under Task 1 and it survives both. |
+| G11, G14 | Unchanged Phase 1A residuals. |
+
+---
+
+## Documentation correction
+
+The Phase 1A recommendation said the guarantees stop in "two places (G10, G11)".
+G10 was closed by `b7b5d35`, which removed the shared credential entirely —
+analytical isolation no longer depends on any application choice. Corrected in
+[`19_PHASE_1A_REPORT.md`](19_PHASE_1A_REPORT.md) to name **G11 alone**, with a
+note on what changed.
+
+A stale sentence in a *recommendation* is the worst place for one: a reader
+deciding whether to proceed would have counted an open boundary that is not
+open.
+
+---
+
+## Completion
+
+### Task-by-task outcome
+
+| # | Task | Outcome | Gap closed |
+| --- | --- | --- | --- |
+| 1 | Real OIDC integration | **PASS** — 28 tests against a containerized Keycloak. No production code changed; the adapter was correct, which could not have been asserted beforehand. | **G13** |
+| 2 | Operator-driven tenant provisioning | **PASS** — 23 tests. Three-transaction workflow, atomic claim, redacted failures. Found and fixed a credential leak into `provisioning_error`. | PO-003 consequence |
+| 3 | Browser end-to-end security test | **PASS** — 11 tests through a real browser. Found two of its own assertions to be wrong before finding the application to be right. | **G3**, part of **G12** |
+
+### Commits
+
+| Commit | Task |
+| --- | --- |
+| `9d21efc` | Task 1 — OIDC against a real identity provider |
+| `d7e2518` | Task 2 — operator-driven tenant provisioning |
+| `cc29dfa` | Task 3 — browser tenant-isolation suite |
+
+Plus `cb5d75c`, a formatting-only fix for the one red CI run (see Task 2).
+
+### Test results, as observed in CI
+
+Every figure below is from the final CI run's log, not a local run.
+
+| Suite | Result |
+| --- | --- |
+| Unit and architecture | 59 passed |
+| Integration | 12 passed |
+| `SECURITY: control-plane tenant isolation` | 28 passed |
+| `SECURITY: per-tenant analytical credentials (G10)` | 27 passed |
+| `SECURITY: operator-driven tenant provisioning` | **23 passed** |
+| `SECURITY: audit tamper evidence` | 23 passed |
+| `SECURITY: production token verification` | 33 passed |
+| `SECURITY: OIDC against a real identity provider` | **28 passed** |
+| `SECURITY: privileged platform access` | 8 passed |
+| `SECURITY: audit integrity and authorization` | 9 passed |
+| `SECURITY: worker privileges and background isolation` | 16 passed |
+| `SECURITY: tenant isolation in the browser` | **11 passed** |
+| Web unit | 7 pass, 0 fail |
+| Secret-scan self-test | 10 cases |
+
+**278 automated checks, 0 failures.** Phase 1A closed at 232.
+
+`mypy --strict`: clean, 40 source files (API) and 5 (worker).
+`ruff format --check` and `ruff check`: clean, 72 files.
+
+### Migration and rollback
+
+Migration `0004_tenant_provisioning` adds the provisioning lifecycle columns,
+widens `ck_tenant_status`, and creates a partial index on incomplete tenants.
+
+| Operation | Result |
+| --- | --- |
+| `alembic upgrade head` (`0001` → `0004`) | **pass** |
+| `alembic downgrade base` (`0004` → `0003` → `0002` → `0001` → base) | **pass** |
+| `alembic upgrade head` (re-apply) | **pass** |
+| Model-drift autogenerate | **empty** |
+
+The drift check earned its place again: the partial index was in the migration
+and not on the ORM model. That is the second time it has caught real drift, and
+both times the drift was invisible to every other check.
+
+The downgrade deliberately settles `status = 'provisioning'` rows to `'active'`
+rather than failing on the narrower constraint. A migration that cannot run
+backwards cannot ship.
+
+### Final CI
+
+[Run 31239982186](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31239982186)
+— **success, all 7 jobs**:
+
+| Job | Result |
+| --- | --- |
+| Python — format, lint, types | ✓ |
+| Python — migrations, unit, integration, security | ✓ |
+| SECURITY: OIDC against a real identity provider | ✓ |
+| SECURITY: tenant isolation in the browser | ✓ |
+| Web — lint, types, tests, build | ✓ |
+| Local stack smoke test | ✓ |
+| Secret scan | ✓ |
+
+Two of these jobs are new, and both passed on their first CI execution.
+
+### Unresolved risks
+
+Ordered by what would hurt most if ignored.
+
+| # | Risk | Why it is acceptable now | What would change that |
+| --- | --- | --- | --- |
+| 1 | **G11 — audit checkpoints are not exported off-box.** A database owner can rewrite them undetected. | The only remaining boundary on tamper-evidence, documented and tested. Tampering by any application or platform role is detectable. | A compliance commitment that names the database administrator in the threat model. |
+| 2 | **G14 — no production `SecretStore` adapter.** | `build_secret_store` fails closed in production-like environments, so this blocks a deployment rather than weakening one. | The first non-local deployment. |
+| 3 | **Cache discipline.** ADR-007 §4 requires `auth_scope_hash` in every cache key; no cache exists yet. | The highest-severity defect from the Phase 0 review is currently *impossible*. | The moment caching is introduced — which the first connector slice may well do. |
+| 4 | **The authorization-code flow is unexercised.** Redirect handling, PKCE, state, and nonce are untested. Both Task 1 and Task 3 sign in through the local path. | Token *verification* is now proven against a real provider, and that is the security-critical half. The client half is standard and delegated. | Configuring a real IdP for a real environment. |
+| 5 | **One identity provider, one browser.** Keycloak and Chromium. Entra ID and Okta differ in claim shapes and in whether `aud` is a string or an array. | The adapter handles both shapes; only one has been observed. | A customer naming their provider. |
+| 6 | **Deprovisioning has no operator route.** `deprovision` exists and is used by tests; nothing calls it in anger. | Offboarding is a governed action needing its own retention decision. Inventing one here would have been scope. | The first tenant that leaves, or a data-retention commitment. |
+| 7 | **No background retry for failed provisioning.** A failed tenant waits for an operator. | Failures are visible and retryable, and the outbox event exists. | Provisioning volume that makes manual retry disproportionate. |
+| 8 | **ADR-012 amendment owed** — PO-004 requires reason and approval in observation provenance. | Nothing is implementable until the metric layer exists. | Starting the metric layer (Phase 6). |
+
+Risks 1, 2, 3 and 8 are carried from Phase 1A unchanged. Nothing in these three
+tasks weakened any existing guarantee.
+
+### Recommendation
+
+**PASS. The first connector slice may begin.**
+
+The three conditions that gated it are discharged, and each was discharged by
+attacking the claim rather than confirming it:
+
+1. **Authentication is proven, not assumed.** The adapter has met a real
+   provider, survived six classes of forged token signed by keys that provider
+   genuinely publishes, and healed a live key rotation without a restart. A
+   cryptographically perfect token naming another tenant is refused by the
+   membership lookup.
+2. **Tenants can be created reliably and observably.** Provisioning is
+   idempotent, races are refused by the database rather than by a check-then-act
+   window, partial failures are visible and retryable, and the credential
+   appears in no response, row, audit event, outbox message, or log line — as
+   verified by searching for the actual password.
+3. **Isolation holds where the customer meets it.** A real browser, real
+   sessions, real identifiers, and the manipulations an attacker reaches for
+   first.
+
+**Three conditions on the connector slice**, stated now because they are cheaper
+to honour than to retrofit:
+
+- **`auth_scope_hash` in every cache key, from the first cache.** Risk 3 becomes
+  live the moment a connector caches anything.
+- **Connector work stays serializable and remotely executable.** PO-002 preserved
+  the customer-network agent as an extension point, and ADR-004's
+  `ExtractPlan`/`RecordBatch` streaming contract is that extension point.
+  Collapsing it into an in-process object model would close the door quietly.
+- **Every connector credential goes through the `SecretStore`.** G14 means there
+  is no production adapter yet; a connector that reads a credential from the
+  environment instead would work locally and be wrong everywhere else.
+
+What these tasks should change about how the next phase is verified: **twice
+here, the test was wrong and the code was right** — the RSC echo, and the tenant
+object with a shared `status` field. Both times the tempting fix was to weaken
+the assertion until it passed. Both were resolved by making the assertion more
+precise instead, and writing down why. That is the harder direction, and it is
+the one that keeps a suite worth having.

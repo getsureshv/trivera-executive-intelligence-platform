@@ -442,8 +442,15 @@ Questions **Q5–Q12** remain open. None gates Phase 1B.
 see *Phase 1A closure*.) Phase 1A is complete and its guarantees are now
 evidenced rather than asserted. Every blocking finding is fixed with a test that
 would catch its regression, CI is green end to end, and the boundaries of each
-guarantee are documented — including the two places where the guarantee stops
-(G10, G11).
+guarantee are documented — including the one place where a guarantee stops
+(**G11**: a database owner can rewrite the audit checkpoint undetected).
+
+G10 was listed here as a second such boundary and no longer is. It was closed
+by commit `b7b5d35`, which removed the shared credential entirely; analytical
+isolation no longer depends on any application choice. The sentence was stale,
+and a stale sentence in a recommendation is the one place it does the most
+damage — a reader deciding whether to proceed would have counted an open
+boundary that is not open.
 
 The conditions on proceeding to Phase 1B:
 

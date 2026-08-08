@@ -49,7 +49,13 @@ decision means writing a new ADR, not editing the old one
 | --- | --- | --- |
 | 20 | [Product-Owner Decisions](20_PRODUCT_OWNER_DECISIONS.md) | PO-001 … PO-005 — the business commitments the ADRs serve. **Outrank accepted ADRs**; closes Phase 0 questions Q1–Q4 |
 | 19 | [Phase 1A Report](19_PHASE_1A_REPORT.md) | Completion report for the platform skeleton, **as remediated**: the four security findings and their fixes, the role and credential model, tests with observed results, migration/rollback evidence, the green CI run, and remaining gaps |
-| — | [Architecture Decision Records](adr/README.md) | ADR-001 … ADR-015 — the binding decisions |
+| — | [Architecture Decision Records](adr/README.md) | ADR-001 … ADR-016 — the binding decisions |
+
+## Phase 1B entry tasks
+
+| # | Document | What it covers |
+| --- | --- | --- |
+| 21 | [Phase 1B Entry Tasks Report](21_PHASE_1B_ENTRY_REPORT.md) | The three conditions recorded at Phase 1A's closure: OIDC against a real identity provider, operator-driven tenant provisioning, and the first browser end-to-end security test. Commits, observed test results, migration evidence, unresolved risks, and the recommendation on beginning the first connector slice |
 
 ## Agent prompts
 
@@ -76,14 +82,20 @@ decision means writing a new ADR, not editing the old one
 
 ## Current phase
 
-**Phase 1A — Platform skeleton is complete** (2026-08-07, commit `d766783`). See
-[`19_PHASE_1A_REPORT.md`](19_PHASE_1A_REPORT.md). The repository now contains application
-code: the platform foundation and enforced tenant isolation, and deliberately no
-business-intelligence functionality.
+**Phase 1A is closed** (2026-08-07) and its **three entry tasks for Phase 1B are
+complete** (2026-08-08). See [`19`](19_PHASE_1A_REPORT.md) and
+[`21`](21_PHASE_1B_ENTRY_REPORT.md).
 
-Phase 1A was remediated on 2026-08-07 after a review found four security defects
-(analytical isolation, production token verification, worker privileges, audit
-tamper-evidence). All four are fixed and evidenced; CI runs green. Product-owner
-questions Q1–Q4 from
-[`17_PHASE_0_ARCHITECTURE_REVIEW.md`](17_PHASE_0_ARCHITECTURE_REVIEW.md) remain open and
-gate the wider Phase 1 scope.
+The repository contains the platform foundation and enforced tenant isolation,
+now evidenced at three layers — database, API, and browser — plus delegated
+authentication proven against a real identity provider and an idempotent,
+observable tenant-provisioning workflow. There is still deliberately **no
+business-intelligence functionality**: no connectors, semantic model, metrics,
+dashboards, lineage, insights, or AI.
+
+Gaps **G3** and **G13** are closed; **G12** is partly closed. **G11** (audit
+checkpoints are not exported off-box) and **G14** (no production `SecretStore`
+adapter) remain documented boundaries. Product-owner questions Q1–Q4 are answered
+in [`20`](20_PRODUCT_OWNER_DECISIONS.md); Q5–Q12 remain open and none gates the
+first connector slice, which is **recommended to begin** under the three
+conditions in [`21`](21_PHASE_1B_ENTRY_REPORT.md).
