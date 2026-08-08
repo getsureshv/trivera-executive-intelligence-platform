@@ -29,6 +29,7 @@ old one), never quietly editing the old decision or overriding it in a research 
 | [013](ADR-013-configuration-versioning.md) | Configuration Versioning | `ConfigurationBundle` as the atomic, immutable unit of publish, rollback, provenance, and templating |
 | [014](ADR-014-observability.md) | Observability | OpenTelemetry; data health is product health; audit is a durable store, not a log stream |
 | [015](ADR-015-secrets-management.md) | Secrets Management | References only — a metadata dump contains zero customer credentials |
+| [016](ADR-016-bounded-context-enforcement.md) | Bounded-Context Enforcement | Amends ADR-001: contracts enforced by a dependency-free AST check, not `import-linter` |
 
 Context and the reasoning behind these sit in
 [`../17_PHASE_0_ARCHITECTURE_REVIEW.md`](../17_PHASE_0_ARCHITECTURE_REVIEW.md).

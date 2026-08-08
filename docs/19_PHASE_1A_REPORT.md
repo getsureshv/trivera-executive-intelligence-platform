@@ -1,354 +1,403 @@
 # 19 — Phase 1A Completion Report (Platform Skeleton)
 
 Date: 2026-08-07
-Commit: `d766783` — *feat: Phase 1A platform skeleton with enforced tenant isolation*
-Preceded by: [`17_PHASE_0_ARCHITECTURE_REVIEW.md`](17_PHASE_0_ARCHITECTURE_REVIEW.md)
-Governed by: [ADR-001](adr/ADR-001-repository-architecture.md) … [ADR-015](adr/ADR-015-secrets-management.md)
+Status: **Remediated.** Supersedes the first version of this report, which
+overstated four guarantees — see *Corrections* below.
+Commits: `d766783` (initial), `450aab5` (remediation), `c12ef30` (CI fixes)
+CI: [run 31230016910](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31230016910)
+— **all 5 jobs green**
+Governed by: [ADR-001](adr/ADR-001-repository-architecture.md) …
+[ADR-016](adr/ADR-016-bounded-context-enforcement.md)
 
 ---
 
 ## Executive Summary
 
-Phase 1A delivers the platform foundation and **nothing else**. There is no
-business-intelligence functionality in the repository: no connectors, no schema
-discovery, no profiling, no semantic model, no field mappings, no metric engine, no
-dashboards, no lineage, no insight engine, and no AI integration. That absence is the
-plan, not an omission.
+Phase 1A delivers the platform foundation and nothing else: no connectors, no
+discovery, no semantic model, no metric engine, no dashboards, no lineage, no
+insights, no AI. That absence is the plan.
 
-**All ten Phase 1A objectives are met and verified by execution**, not by inspection.
-The decisive objective — that Tenant A cannot reach Tenant B's data — is proven at three
-independent layers and demonstrated against a live stack with four distinct attack
-vectors.
+**The first version of this report was wrong about four things.** It described
+security properties the code did not have, and it did so confidently because
+nobody had written a test that could distinguish the claim from the
+implementation. A review found all four. This version states only what a test
+proves, and each of those tests is named below with its result.
 
-Two findings qualify the result and are stated plainly rather than buried:
+The four defects, and what was actually true at the time:
 
-1. **The CI pipeline has never executed.** It is authored and committed, but the two
-   commits on `main` are unpushed and no workflow run exists. Everything CI would check
-   was run locally; the pipeline itself is unproven.
-2. **The web application has zero tests.** `pnpm -r test` passes vacuously (0 tests, 0
-   failures). Frontend correctness currently rests on `tsc --noEmit`, ESLint, a
-   successful production build, and manual verification against the running API.
-
-Neither blocks Phase 1B. Both are named in *Known Gaps* with a recommended owner phase.
-
----
-
-## Objectives vs. Outcome
-
-| # | Objective | Status | Evidence |
-| --- | --- | --- | --- |
-| 1 | The application runs locally | **Met** | Full stack from an empty volume; every healthcheck green |
-| 2 | Frontend and backend communicate | **Met** | `/app` renders live tenant, capability, and readiness data from the API |
-| 3 | PostgreSQL persistence works | **Met** | 8 tables migrated; tenants, users, memberships, audit rows persisted |
-| 4 | Tenant context is enforced | **Met** | Resolved from verified membership; typed argument required by the data-access layer |
-| 5 | Tenant A cannot access Tenant B | **Met** | 45 security tests + 4 live attack vectors, all refused |
-| 6 | AuthN/AuthZ boundaries exist | **Met** | Delegated OIDC-shaped auth, no password storage; capability model |
-| 7 | Database migrations work | **Met** | Alembic; runtime role has no DDL rights at all |
-| 8 | Audit events can be recorded | **Met** | Append-only, hash-chained per tenant, transactionally consistent |
-| 9 | Health/readiness information | **Met** | Liveness and readiness split with distinct semantics |
-| 10 | Automated verification exists | **Met (with gap)** | 116 tests passing; CI authored but never executed |
-
----
-
-## What Was Built
-
-### Size
-
-| Area | Files | Lines |
+| # | Claimed | Actually |
 | --- | --- | --- |
-| Python — application source | 51 (`apps/api`, `apps/worker`) | 4,482 |
-| Python — tests | — | 1,614 |
-| Python — migrations | 1 | 353 |
-| TypeScript / React | 21 | 1,153 |
-| Infrastructure + CI | 4 | — |
-| **Total committed** | **97 files** | **9,783 insertions** |
+| 1 | Analytical data was isolated per tenant | One shared role held `USAGE` on **every** tenant schema |
+| 2 | Authentication was delegated OIDC | Production verified tokens with the **development HMAC secret** |
+| 3 | The worker ran on a constrained credential | The worker held a reusable **`BYPASSRLS`** credential |
+| 4 | Privileged audit deletion was detectable | Tail, prefix, and **total deletion were undetectable**; an empty chain verified as intact |
 
-The test-to-source ratio on the backend is roughly 1:2.8, which is appropriate for a
-phase whose entire product is a security property.
+All four are fixed and proven. **220 tests pass** (188 API + 16 worker + 7 web +
+10 shell-script cases), CI is green end to end, and the remaining gaps are
+listed honestly rather than discovered later.
 
-### Backend — `apps/api` (ADR-001, ADR-002)
+---
 
-FastAPI modular monolith, package-by-context:
+## Corrections to the previous report
 
-| Package | Responsibility |
+Recorded explicitly, because a report that quietly improves its own claims is
+the same failure mode as the one being corrected.
+
+| Previous statement | Status | Correction |
+| --- | --- | --- |
+| "`eip_app` has USAGE but not CREATE on each [tenant schema]" — presented as evidence of isolation | **Wrong conclusion from a true fact** | A single role holding `USAGE` on every schema is the *absence* of isolation. The fact was accurate; the inference was not. |
+| "Delegated OIDC-shaped auth with no password storage" | **Half true** | No password was stored, but production verification used the development secret. |
+| "Outbox relay on the **constrained** role" | **False** | The relay enumerated tenants on the `BYPASSRLS` role every pass. |
+| "Deletion by the privileged role remains detectable: the hash chain breaks" | **False** | True only for interior deletion. Tail deletion, truncation, and total erasure all left a valid chain. |
+| "39% of the suite is security tests … that ratio is the point" | **Misleading** | The ratio was real; the coverage was not. Those tests exercised paths the defects bypassed. |
+| "CI has never executed" (gap G1) | **Now resolved** | CI runs green: [31230016910](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31230016910). |
+| "`pnpm -r test` passes with 0 tests" (gap G2) | **Now resolved** | 7 real tests. |
+
+The pattern in all four: **each claim was tested only along the path it was
+true on.** The isolation tests exercised RLS on the control plane, which
+worked, and never touched the analytical plane. The worker tests observed a
+tenant session, which was correctly scoped, and never inspected the credential
+the worker actually held. Every test below is written to fail if its claim
+becomes false, not to confirm it where it already holds.
+
+---
+
+## Finding-by-finding
+
+### F1 — Analytical data-plane isolation
+
+**Was:** `provision()` executed `GRANT USAGE ON SCHEMA <tenant> TO eip_app` for
+every tenant. Since all tenants share that role, PostgreSQL permitted any
+session to read any tenant's analytical tables. Isolation depended on
+`TenantContext`, `DataPlaneHandle`, and schema qualification — application
+constructs the database does not enforce.
+
+This was also a **deviation from ADR-003 §2**, which already required `USAGE`
+on "only the current tenant's schema".
+
+**Now:**
+
+- `eip_app` is **`NOINHERIT`** and holds **no privilege** on any tenant schema.
+- Each tenant gets a `NOLOGIN`, passwordless role `eip_t_<uuid>` with `USAGE` on
+  exactly one schema.
+- `eip_app` is a *member* of each, which grants only the ability to `SET ROLE` —
+  not the privileges, because of `NOINHERIT`.
+- `analytical_session()` issues `SET LOCAL ROLE`, transaction-scoped, and is the
+  only place in the codebase that does (enforced by an architecture test).
+- Startup refuses to boot if `eip_app` is `INHERIT`.
+
+After the role switch, a statement naming another tenant's schema is refused by
+PostgreSQL with `permission denied` — regardless of how the SQL was built.
+
+**Residual risk, stated plainly:** `eip_app` is a member of every tenant role,
+so code that *deliberately* assumed the wrong tenant's role would succeed. It is
+bounded by a single `SET ROLE` call site, a handle/context match check, and an
+architecture test. Eliminating it requires per-tenant login credentials and
+pools — ADR-003 Tier 2 — which needs the `SecretStore` adapter that arrives in
+Phase 2.
+
+### F2 — Production OIDC verification
+
+**Was:** `verify_token()` checked that a JWKS URL was configured in
+production-like environments, then verified with `auth_dev_signing_secret`
+anyway. Anyone holding the development secret could mint a token accepted in
+production, and the code read as finished — so nobody would look again.
+
+**Now:** `eip/identity/oidc.py`, with two verifiers selected by environment and
+**no fallback path between them**:
+
+- Asymmetric algorithms only (`RS256/384/512`, `ES256/384`); no `HS*` in the
+  allowlist, and a startup assertion that fails if one is ever added.
+- `kid` required; unknown `kid` triggers one rate-limited refetch so rotation
+  heals without an outage, then rejects.
+- Issuer, audience, expiry, and required claims all validated; 60s leeway.
+- JWKS cached with a TTL and a refetch floor.
+- `build_verifier` **raises** on incomplete OIDC configuration in
+  `dev`/`staging`/`production`; the API calls it during lifespan, so the process
+  fails to start rather than failing every sign-in.
+- The development issuer is guarded three times: router not mounted, verifier
+  refuses construction, `issue_dev_token` refuses to mint.
+
+### F3 — Worker privileges
+
+**Was:** the worker received `EIP_DB_PLATFORM_DSN` — a reusable
+general-purpose `BYPASSRLS` credential — to answer one question: which tenants
+have pending outbox rows. A compromised worker had permanent unrestricted
+cross-tenant read access. The path was logged, never audited. The module's own
+docstring claimed to avoid "the lazy way" while doing exactly that.
+
+**Now:**
+
+- The worker builds only a constrained engine (`create_app_engine`), so it is
+  **structurally incapable** of opening a privileged connection — stronger than
+  merely unsetting the environment variable.
+- Enumeration goes through `eip_outbox_pending_tenants()`, a `SECURITY DEFINER`
+  function whose result type is `TABLE(tenant_id uuid)` — identifiers only, no
+  payloads, no other table. `EXECUTE` granted to `eip_app` alone.
+- The function is owned by `eip_platform` because `outbox` carries `FORCE RLS`,
+  which applies to the table owner too. **The function is the narrowly
+  privileged dispatcher; the credential is not.**
+- Relaying writes a durable audit event into the tenant's own chain, in the same
+  transaction, only when messages are actually published.
+
+### F4 — Audit tamper evidence
+
+**Was:** the digest omitted `occurred_at`, `actor_type`, `trace_id`, and
+`request_id`, so an event could be backdated or reattributed from a person to
+the system undetected. There was no checkpoint, so deleting the final event,
+truncating to an earlier prefix, or deleting the entire chain each left a
+perfectly valid remainder — and an empty chain verified as intact. The most
+complete possible tampering produced the most reassuring possible result.
+
+**Now:**
+
+- The digest covers **every immutable field**, with `occurred_at` normalised to
+  UTC at microsecond resolution so verification is timezone-stable.
+- `audit_chain_head` records the highest sequence and hash ever written,
+  maintained by a `SECURITY DEFINER` trigger and **writable by no runtime or
+  platform role**. `eip_platform` may delete events; it may not retract the
+  proof they existed.
+- The checkpoint advances monotonically and carries **no foreign key** to
+  `tenant`, so it outlives the tenant.
+- `verify_chain` returns a typed result:
+
+| Tampering | Detected as |
 | --- | --- |
-| `eip.platform` | Tenancy, settings, errors, structured logging, telemetry, DB engines, ports |
-| `eip.identity` | Principals, tenants, memberships, roles, token verification, context resolution |
-| `eip.governance` | Audit trail (hash chain), transactional outbox |
-| `eip.dataplane` | `TenantDataPlane` port + the approved implementation |
-| `eip.api` | HTTP routers — the only package permitted to import FastAPI |
-| `eip.scripts` | Operational entry points (local bootstrap) |
+| field mutated | `MUTATED` |
+| interior event deleted | `GAP` |
+| final event deleted | `TRUNCATED` |
+| truncated to a prefix | `TRUNCATED` |
+| all events deleted | `ERASED` |
+| tenant offboarded (sanctioned) | `OFFBOARDED` |
+| never audited | `EMPTY` |
 
-`mypy --strict` passes across all 37 modules with no suppressions beyond three
-declared third-party stub overrides.
-
-### API surface
-
-```
-GET    /health                     liveness — touches no dependency
-GET    /ready                      readiness — DB, migrations, isolation self-check
-GET    /v1/me                      caller identity + resolved tenant (takes no input)
-GET    /v1/tenants/{tenant_id}     accepts an id specifically so manipulation is testable
-GET    /v1/memberships             tenant-scoped
-GET    /v1/audit-events            tenant-scoped, capability-gated
-POST   /v1/admin/tenants           privileged; requires X-Elevation-Reason
-POST   /v1/admin/memberships       privileged; refuses to grant platform_admin
-POST   /v1/dev/token               local/ci only; triple-guarded
-```
-
-No endpoint accepts SQL, a formula, or a field path. No endpoint reads a tenant
-identifier from a header, body, or subdomain.
-
-### Control plane — 8 tables
-
-| Table | Scope |
-| --- | --- |
-| `tenant`, `app_user`, `role`, `role_capability`, `alembic_version` | **Global** — enumerated and RLS-exempt by design |
-| `membership`, `audit_event`, `outbox` | **Tenant-scoped** — `tenant_id` + FORCE RLS + policy |
-
-`app_user` is global deliberately: a person may belong to several tenants, so the user
-record cannot itself be tenant-scoped. Membership is the object that grants access, and
-it is the one an attacker would need to forge.
-
-### Frontend — `apps/web`
-
-Next.js 15 / React 19 application **shell**: layout, placeholder authenticated
-experience, tenant-context display, API status display, loading states, error boundary,
-development sign-in. No dashboards, charts, KPI components, or source-configuration
-screens.
-
-The web tier holds **no database credentials in any environment**, which is what keeps
-the API the only path to data.
-
-### Worker — `apps/worker` (ADR-009)
-
-Transactional outbox relay, broker connectivity check, health/readiness server. No
-ingestion pipelines. The relay runs on the **constrained** role and processes each tenant
-inside a proper tenant-scoped session.
+**The boundary of the guarantee, stated rather than implied:** *tampering by any
+application or platform role is detectable; tampering by a database owner is
+not.* An owner can drop the trigger, rewrite the checkpoint, and reconstruct a
+consistent chain. Detecting that requires exporting checkpoints outside this
+database, which Phase 1A does not do.
 
 ---
 
-## Tenant Isolation — the Central Result
+## Database role and credential model
 
-### How it is implemented
+| Role | superuser | bypassrls | inherit | createrole | Used by |
+| --- | --- | --- | --- | --- | --- |
+| `eip_app` | no | **no** | **no** | no | every request and every job |
+| `eip_platform` | no | **yes** | no | yes | audited platform-admin operations; owns the dispatch function |
+| `eip_migrator` | no | no | no | no | Alembic only; member of `eip_platform` so migrations can assign function ownership |
+| `eip_t_<uuid>` | no | no | no | no | never logs in; assumed via `SET LOCAL ROLE` |
 
-**Three PostgreSQL roles, deliberately distinct:**
+**Connection routing**
 
-| Role | `rolsuper` | `rolbypassrls` | Owns tables | Used by |
-| --- | --- | --- | --- | --- |
-| `eip_app` | no | **no** | no | every request and every job |
-| `eip_platform` | no | **yes** | no | audited platform-admin operations only |
-| `eip_migrator` | no | no | **yes** | Alembic only |
+```
+Control plane   eip_app       → public schema; RLS scoped by app.tenant_id
+                                (SET LOCAL, transaction-scoped)
 
-**Two independent enforcement layers.** Application code filters by tenant *and* every
-tenant-scoped table carries `ENABLE` + `FORCE ROW LEVEL SECURITY` with a policy resolving
-`NULLIF(current_setting('app.tenant_id', true), '')::uuid`. The setting is applied
-transaction-locally, so it cannot survive a pooled connection returning to the pool. If
-application filtering is ever forgotten, the query returns **zero rows** — the comparison
-against NULL is never TRUE, so the failure mode is fail-closed by construction.
+Analytical      eip_app       → SET LOCAL ROLE eip_t_<uuid>
+                                current_user becomes the tenant role; PostgreSQL
+                                denies any other tenant's schema outright
 
-**Startup refuses to proceed** unless the runtime role is genuinely constrained and every
-tenant-scoped table has an enforced policy. A process that booted with isolation silently
-disabled would pass every functional test while being catastrophically wrong.
+Principal       eip_app       → app.user_id only, for membership lookup at
+                                sign-in (policy membership_self_select).
+                                Sign-in never runs on the privileged role.
 
-**One deliberate exception, tightly scoped:** `membership_self_select` is a `FOR SELECT`
-policy keyed on `app.user_id`, letting a principal read *their own* membership rows before
-a tenant is known. Without it, sign-in would have to run on the BYPASSRLS role — which
-would mean every login executed with row-level security disabled.
+Privileged      eip_platform  → separate engine, API process only, requires a
+                                PlatformContext with a recorded reason
 
-### Live acceptance test (executed against the running stack)
+Worker          eip_app       → constrained engine only; no platform engine is
+                                ever constructed
+```
 
-Two tenants (`acme-industrial`, `borealis-capital`), two users, four attack vectors:
+One pool per login role. No per-tenant credential exists, so there is no
+per-tenant secret to store or rotate. `SET LOCAL` is transaction-scoped, so no
+pooled connection carries a tenant role or tenant setting into the next
+checkout — asserted by test.
 
-| # | Scenario | Expected | Actual |
+**Verified at runtime:**
+
+```
+eip_app       super=f  bypassrls=f  inherit=f
+eip_migrator  super=f  bypassrls=f  inherit=f
+eip_platform  super=f  bypassrls=t  inherit=f
+
+eip_audit_chain_advance    owner=eip_migrator  bypassrls=false
+eip_audit_chain_offboard   owner=eip_migrator  bypassrls=false
+eip_outbox_pending_tenants owner=eip_platform  bypassrls=true
+```
+
+---
+
+## Tests: new, changed, and observed results
+
+**220 total.** Every count below was collected from the suite, not estimated.
+
+| Suite | Tests | Status | Purpose |
 | --- | --- | --- | --- |
-| 1 | User A → Tenant A | 200 | **200**, `acme-industrial` |
-| 2 | User B → Tenant B | 200 | **200**, `borealis-capital` |
-| 3 | User A requests a token scoped to Tenant B | 403 | **403** |
-| 4 | User A fetches Tenant B by identifier | 404 | **404** |
-| 5 | Control: a tenant that does not exist | 404 | **404, byte-identical to #4** |
-| 6 | User A forges `X-Tenant-Id: <B>` | ignored | **ignored**, still `acme-industrial` |
+| `security/test_oidc_verification.py` | **33** | **new** | F2 — acceptance, wrong issuer/audience/key, expiry, unknown/missing `kid`, `alg=none`, HS256 confusion, environment gating, rotation |
+| `security/test_tenant_isolation.py` | 28 | changed | Control-plane isolation, 3 layers |
+| `security/test_audit_tamper_evidence.py` | **23** | **new** | F4 — field coverage, mutation, all four deletion classes, checkpoint protection, offboarding, documented limits |
+| `security/test_analytical_isolation.py` | **16** | **new** | F1 — role model, cross-schema denial, joins, `search_path`, pooling, guards, negative control |
+| `worker/test_worker_isolation.py` | 16 | **rewritten** | F3 — inspects `pg_roles`/`pg_proc` directly, not behaviour |
+| `security/test_audit_and_authorization.py` | 9 | changed | Append-only grants, capabilities |
+| `security/test_privileged_platform_access.py` | 8 | unchanged | Privileged path is genuinely privileged and gated |
+| `unit/test_platform_primitives.py` | 51 | changed | Now covers the four previously-unhashed fields |
+| `architecture/test_module_boundaries.py` | 8 | changed | + `SET ROLE` containment contract |
+| `integration/test_health_and_migrations.py` | 12 | changed | Migration head, RLS coverage, grants |
+| `web/src/lib/errors.test.ts` | **7** | **new** | G2 — was 0 |
+| `infra/scripts/test-check-no-env-files.sh` | **10** | **new** | Proves the secret scan rejects what it must |
 
-Test #5 is the one most often skipped and matters most: returning 403 for
-"exists but forbidden" and 404 for "does not exist" lets an attacker enumerate the
-platform's customer list by probing identifiers. The two responses are identical in
-status, `code`, `title`, and `detail`.
-
-The frontend was separately checked with a real session cookie: User A's rendered page
-contains no Borealis string of any kind, and header forgery has no effect there either.
-
-### Defence in depth, demonstrated rather than asserted
-
-The database-layer tests deliberately issue queries that **name the other tenant's id**
-with no `WHERE tenant_id` filter of their own. Nothing but RLS prevents the read. A
-negative-control test proves the `eip_platform` role genuinely *can* cross tenants —
-without it, the isolation suite might be passing because the privileged path was broken
-rather than because RLS works.
-
----
-
-## Verification Performed
-
-Every item below was executed, with output observed.
-
-| Gate | Command | Result |
-| --- | --- | --- |
-| Python format | `ruff format --check` | **55 files already formatted** |
-| Python lint | `ruff check` | **All checks passed** |
-| Type safety | `mypy` (strict) | **32 + 5 modules, no issues** |
-| API tests | `pytest tests` | **111 passed** |
-| Worker tests | `pytest` | **5 passed** |
-| TS format | `pnpm format:check` | **clean** |
-| TS lint | `pnpm -r lint` | **clean** (`--max-warnings 0`) |
-| TS types | `pnpm -r typecheck` | **clean** (strict + `exactOptionalPropertyTypes`) |
-| Production build | `next build` | **4 routes compiled** |
-| Stack startup | `compose up --build --wait` from empty volume | **all healthy** |
-| API liveness/readiness | `/health`, `/ready` | **ok / ready**, all 3 checks pass |
-| Worker liveness/readiness | `/health`, `/ready` | **ok / ready** |
-| Secret scan | pattern scan + `.env` check | **none found** |
-| Dead markers | TODO/FIXME/XXX/HACK | **zero** |
-
-### Test breakdown — 116 total
-
-| Suite | Count | Covers |
-| --- | --- | --- |
-| `tests/unit` | 47 | Secret handling, redaction, audit hash, context, data-plane naming, settings guards |
-| `tests/security` | **45** | Tenant isolation (3 layers), privileged path, audit integrity, capabilities |
-| `tests/integration` | 12 | Health/readiness, migration invariants, outbox scoping |
-| `tests/architecture` | 7 | Bounded-context import contracts |
-| `apps/worker/tests` | 5 | Background-processing isolation |
-
-**39% of the suite is security tests.** For a phase whose deliverable is a security
-property, that ratio is the point.
-
-### Verified infrastructure state
+Observed locally and in CI:
 
 ```
-Roles:        eip_app f|f   eip_migrator f|f   eip_platform f|t   (super|bypassrls)
-RLS:          membership t|t|2   audit_event t|t|1   outbox t|t|1  (enabled|forced|policies)
-Audit grants: eip_app → SELECT, INSERT only (no UPDATE, no DELETE)
-Data plane:   2 tenant schemas; eip_app has USAGE=true, CREATE=false on each
-Audit chain:  per-tenant, each starting seq 1 from genesis, links verified
+API      188 passed
+worker    16 passed
+web        7 pass, 0 fail
+scripts   10 passed
 ```
 
----
+**The tests that would have caught each defect**, and did not exist before:
 
-## Decisions Made During Implementation
-
-Four decisions were taken during the build that were not settled by an ADR. None
-contradicts an accepted decision; each is recorded here rather than left implicit.
-
-**1. `import-linter` replaced by a dependency-free AST test.** ADR-001 specifies
-`import-linter` for bounded-context contracts. Its `grimp` backend is a compiled
-extension without wheels on Windows/ARM64, and it could not be installed on the
-development machine. A boundary check that cannot run on a developer's machine is a
-boundary check that rots, so the contracts are enforced by a ~160-line AST test instead.
-The guarantee is equivalent and the dependency is gone. *This is a deviation from ADR-001
-and should be ratified or reverted.*
-
-**2. Python services run in containers.** No PostgreSQL driver (`asyncpg`, `psycopg`) has
-a prebuilt wheel for Windows/ARM64, and MSVC build tools are absent. Rather than demand a
-compiler toolchain, the API and worker run in containers — which is what makes the
-environment genuinely reproducible rather than "works if you have a compiler", and which
-Phase 1A asked for anyway. The driver is an optional extra (`apps/api[postgres]`), so
-lint, typecheck, and unit tests still run natively.
-
-**3. `eip_platform` retains `DELETE` on `audit_event`.** The append-only guarantee is
-scoped to the *runtime* role. Tenant offboarding and GDPR erasure delete the tenant row,
-which cascades to its audit events, and PostgreSQL requires `DELETE` on the referencing
-table for that cascade. Deletion by the privileged role remains **detectable**: the hash
-chain breaks and `verify_chain` reports the sequence where it does. `TRUNCATE` is never
-granted to any role.
-
-**4. Development token issuer instead of a local IdP.** ADR-010 forbids password storage
-and delegates authentication. Standing up a real IdP for local development and CI would
-add a dependency for no security benefit, so the API mints tokens *in the shape it will
-later verify from a real issuer*. The verification path, membership resolution, and every
-downstream authorization check are identical to production — only the key source differs,
-which is what makes the isolation tests meaningful. It is guarded three times.
-
----
-
-## Defects Found and Fixed
-
-Two bugs were caught by the tests, both reachable only through application startup and
-both invisible to inspection:
-
-| Defect | Impact | Fix |
-| --- | --- | --- |
-| `tablename NOT IN :globals` with a tuple bindparam | asyncpg binds one parameter per placeholder; the startup role assertion raised a syntax error, so **the API could not boot** | `<> ALL(:globals)` with array semantics |
-| `TRUNCATE` not granted to any role | Test cleanup failed; surfaced as 50 fixture errors | Ordered `DELETE`; the underlying grant behaviour is correct and now documented |
-
-The first is worth noting: it was in the code that *verifies isolation is enforced*. Had
-that assertion been written without a test exercising real startup, it could have been
-silently broken while appearing to protect the system.
-
----
-
-## Known Gaps
-
-Stated explicitly so none of them is discovered later as a surprise.
-
-| # | Gap | Severity | Recommended owner |
-| --- | --- | --- | --- |
-| G1 | **CI has never executed.** Authored and committed; 2 commits unpushed; no workflow run exists. The `stack-smoke` and model-drift jobs in particular are unproven. | **High** | Immediate — push and confirm green before Phase 1B |
-| G2 | **No frontend tests.** `pnpm -r test` passes with 0 tests. Correctness rests on types, lint, build, and manual checks. | Medium | Phase 1B, alongside the first real screens |
-| G3 | **No end-to-end browser test.** The `tests/e2e` directory from ADR-001 does not exist; the acceptance flow was driven by `curl`. | Medium | Phase 1B |
-| G4 | **`SecretStore` is a port with no adapter.** Types and interface only; no cloud implementation, because Phase 1A stores no secrets. | Low — by design | Phase 2 (first connector) |
-| G5 | **OpenTelemetry is wired but never exercised.** Disabled by default; no collector has received a span. | Low | Phase 1B |
-| G6 | **`packages/contracts` types are hand-written.** The `sync-openapi` script exists but `openapi.json` is not yet committed, so the CI drift check has nothing to compare against. | Medium | Phase 1B |
-| G7 | **Dramatiq is a connectivity check only.** No actors, no queues, no per-tenant fairness caps yet. | Low — by design | Phase 2 |
-| G8 | **`import-linter` deviation from ADR-001** (see Decisions §1) is unratified. | Low | Ratify or revert in Phase 1B |
-| G9 | **Health checks in `docker-compose` use `urllib`**, so they exercise the HTTP surface but not the dependency graph the way `/ready` does. | Informational | — |
-
----
-
-## Risks Carried Into Phase 1B
-
-| Risk | Why it matters now |
+| Defect | Test that now catches it |
 | --- | --- |
-| **Every new tenant-scoped table is an opportunity to forget RLS.** | The invariant is currently enforced by a test and a startup assertion. Both work; neither prevents a developer from adding a table and *also* adding it to `GLOBAL_TABLES` to make the test pass. Code review of that list is load-bearing. |
-| **The `membership_self_select` policy is a permitted widening.** | It is correct and minimal today. Any future policy keyed on `app.user_id` should be treated as a security change requiring the same scrutiny. |
-| **Cache does not yet exist.** | ADR-007 §4 requires `auth_scope_hash` in every cache key. There is no cache in Phase 1A, so the highest-severity defect found in Phase 0 review is *not yet possible* — and must be prevented the moment caching is introduced. |
-| **Tenant provisioning is manual.** | Deliberate, per the Phase 0 answer to Q3. It becomes a bottleneck the moment a second real customer exists. |
+| F1 | `test_runtime_role_holds_no_direct_schema_privilege`, `test_tenant_a_cannot_query_tenant_b_fully_qualified` |
+| F2 | `test_a_development_token_is_rejected_by_the_production_verifier`, `test_hs256_token_is_rejected_by_the_production_verifier` |
+| F3 | `test_worker_role_has_no_bypassrls`, `test_worker_credential_cannot_read_another_tenants_rows_directly` |
+| F4 | `test_final_event_deletion_is_detected`, `test_total_deletion_is_detected`, `test_mutating_a_field_breaks_the_chain[occurred_at/actor_type/trace_id/request_id]` |
+
+Three tests are **negative controls** — they prove the other tests are not
+passing vacuously: `TestNegativeControl::test_privileged_role_reads_both_tenants`
+(the cross-tenant data exists), `test_platform_session_sees_every_tenant` (the
+privileged path really can cross tenants), and
+`test_it_returns_only_tenant_identifiers` (the dispatch function's shape).
 
 ---
 
-## Product-Owner Items Still Open
+## Migration and rollback results
 
-**PO-001 through PO-005 do not exist in this repository.** Verified by `git ls-files` and
-a repository-wide grep. Phase 1A proceeded under ADR-003/009/010/014/015 as the governing
-authority, per the phase brief's own instruction to adapt to the accepted ADRs.
+Migration `0002_isolation_audit` adds `audit_chain_head`, the chain trigger, the
+offboard function, the outbox dispatch function, and the grant revocations.
 
-Phase 1A touches none of the areas those decisions gate, so nothing built here is at risk
-if they differ. Confirmation is still needed on:
+| Operation | Result |
+| --- | --- |
+| `alembic upgrade head` (empty database) | **pass** — `0001` → `0002` |
+| `alembic downgrade 0001_control_plane` | **pass** |
+| `alembic upgrade head` (re-apply) | **pass** |
+| `alembic downgrade base` → `upgrade head` (CI) | **pass** |
+| Model-drift autogenerate | **empty diff** |
 
-- **PO-005 / tenant data plane** — Phase 1A implements ADR-003's schema-per-tenant. If
-  PO-005 selected a different mode, the `TenantDataPlane` port absorbs the change, but the
-  implementation would need replacing.
-- **Q1–Q4 from the Phase 0 review** remain the gate on wider Phase 1 work: bring-your-own
-  warehouse, private-network connectivity, SaaS-now vs. TriVera-first, and restatement
-  policy.
+Two defects were caught by running these rather than assuming them:
+
+- The original revision id (`0002_isolation_and_audit_hardening`, 34 chars)
+  exceeded Alembic's `varchar(32)` version column. Renamed.
+- The drift check found `audit_chain_head` had no ORM model, and several columns
+  declared a `server_default` in the migration but not in the model. Both fixed;
+  autogenerate is now empty. **This is the check earning its place** — it found
+  real drift on its first successful run.
 
 ---
 
-## Readiness for Phase 1B
+## CI evidence
 
-**Ready, conditional on G1.** The foundation holds: isolation is enforced and proven,
-the module boundaries are mechanically checked, migrations are reversible and
-drift-checked, and the audit trail is tamper-evident. Nothing in Phase 1B needs to
-revisit these.
+**[Run 31230016910](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31230016910) — green.**
 
-The single thing that should happen before new feature work: **push the branch and
-confirm CI is green.** A pipeline that has never run is a pipeline that does not work
-yet, and every guarantee in this report currently depends on a local machine having been
-used correctly.
+| Job | Result | Duration |
+| --- | --- | --- |
+| Python — format, lint, types | ✓ | 42s |
+| Python — migrations, unit, integration, security | ✓ | 1m12s |
+| Web — lint, types, tests, build | ✓ | 38s |
+| Secret scan | ✓ | 4s |
+| Local stack smoke test | ✓ | 1m5s |
 
-Recommended Phase 1B opening scope, in order:
+Each security suite is a **separately named release-gating step**, so a failure
+names the guarantee it broke rather than reporting "tests failed".
 
-1. Get CI green (G1); commit `openapi.json` and enable the drift check (G6).
-2. Add the frontend test harness and the first end-to-end browser test (G2, G3).
-3. Ratify or revert the `import-linter` deviation (G8).
-4. Begin the Data Source Manager — ADR-004's connector framework with the PostgreSQL
-   connector, per the Phase 0 resequencing that put a typed relational source before
-   file connectors.
+The first run (`31226406999`) failed on three real environment differences,
+recorded here because they are the reason CI must actually run:
+
+1. `pnpm/action-setup@v4` errors when both `version:` and `packageManager` are
+   set. Never reproducible locally.
+2. Alembic's `console_scripts` post-write hook could not resolve `ruff` from an
+   editable install in CI. Switched to `exec`.
+3. **Genuine model drift** — see above.
+
+Also fixed: the secret scan used `grep -E '^\.env$|^\.env\.(?!example)'`.
+Negative lookahead is PCRE, not POSIX ERE, so the second alternative matched
+nothing and **`.env.production` passed silently**. Replaced with a regex-free
+script that has its own 10-case test, run in CI before the check itself.
+
+---
+
+## Remaining gaps
+
+| # | Gap | Severity | Owner phase |
+| --- | --- | --- | --- |
+| G3 | **No end-to-end browser test.** `tests/e2e` from ADR-001 does not exist; the acceptance flow is driven by `curl` and by the stack-smoke job. | Medium | 1B |
+| G4 | **`SecretStore` is a port with no adapter.** Types and interface only — Phase 1A stores no secrets. | Low — by design | 2 |
+| G5 | **OpenTelemetry is wired but never exercised.** Disabled by default; no collector has received a span. | Low | 1B |
+| G7 | **Dramatiq is a connectivity check only.** No actors, queues, or per-tenant fairness caps. | Low — by design | 2 |
+| G9 | Compose health checks use `urllib`, so they exercise HTTP but not the dependency graph `/ready` does. | Informational | — |
+| G10 | **Per-tenant analytical credentials are not implemented.** `eip_app` can `SET ROLE` to any tenant role; see F1 residual risk. | Medium | 2 (ADR-003 Tier 2) |
+| G11 | **Audit checkpoints are not exported off-box.** A database owner can rewrite them undetected; see F4 boundary. | Medium | 1B/2 |
+| G12 | **Frontend tests cover the error type only.** 7 tests, no component or route coverage. | Medium | 1B |
+| G13 | **The OIDC adapter has never run against a real IdP.** Verified against in-process RSA keys and a local JWKS server; discovery is untested against a live provider. | Medium | 1B |
+
+G1 (CI never run), G2 (zero frontend tests), G6 (uncommitted OpenAPI), and G8
+(unratified `import-linter` deviation, now [ADR-016](adr/ADR-016-bounded-context-enforcement.md))
+are **closed**.
+
+---
+
+## Risks carried into Phase 1B
+
+| Risk | Why it matters |
+| --- | --- |
+| **Every new tenant-scoped table is a chance to forget RLS.** | Enforced by a test and a startup assertion — but a developer can add a table *and* add it to `GLOBAL_TABLES` to make the test pass. Review of that list is load-bearing. `audit_chain_head` is the first justified entry; the justification is in the code. |
+| **Every new analytical query path is a chance to skip `SET ROLE`.** | Isolation holds only inside `analytical_session`. The architecture test confines `SET ROLE` to one module, but a query issued on a plain session would simply be denied — a visible failure, not a leak. |
+| **Cache does not yet exist.** | ADR-007 §4 requires `auth_scope_hash` in every cache key. The highest-severity defect from the Phase 0 review is *not yet possible*, and must be prevented the moment caching appears. |
+| **The residual `SET ROLE` risk is real.** | Documented, bounded, and tested — but not eliminated until Tier 2. |
+
+---
+
+## Product-owner items still open
+
+**PO-001 … PO-005 do not exist in this repository** (verified by `git ls-files`
+and a repo-wide grep). Phase 1A and this remediation proceeded under
+ADR-003/009/010/014/015 as the governing authority.
+
+Still needed:
+
+- **PO-005 / tenant data plane** — confirm schema-per-tenant. If a different
+  mode was chosen, the `TenantDataPlane` port absorbs it but the implementation
+  would be replaced.
+- **Q1–Q4 from the Phase 0 review** remain the gate on wider Phase 1 work:
+  bring-your-own warehouse, private-network connectivity, SaaS-now vs.
+  TriVera-first, and restatement policy.
+
+---
+
+## Recommendation
+
+**PASS, conditional.** Phase 1A is complete and its guarantees are now
+evidenced rather than asserted. Every blocking finding is fixed with a test that
+would catch its regression, CI is green end to end, and the boundaries of each
+guarantee are documented — including the two places where the guarantee stops
+(G10, G11).
+
+The conditions on proceeding to Phase 1B:
+
+1. **Answer Q1–Q4 and confirm PO-005.** Q2 (private-network connectivity) can
+   change Phase 2's scope by weeks.
+2. **Accept or reject the two documented residual risks** (G10, G11). Both are
+   defensible for Phase 1A and both have a named remediation path; neither
+   should be discovered later as a surprise.
+3. **Treat G13 as a Phase 1B entry task.** The OIDC adapter is correct against
+   synthetic keys; it has not met a real identity provider, and that is where
+   discovery, clock skew, and claim-shape surprises live.
+
+What this exercise should change going forward: the previous report failed not
+because the code was unusually bad, but because **the tests confirmed the claims
+where they were true instead of attacking them where they might not be.** The
+suites added here are written the other way round — every one of them tries to
+break the guarantee it documents, and several exist purely to prove the others
+are not passing vacuously.

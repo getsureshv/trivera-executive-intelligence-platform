@@ -42,7 +42,7 @@ decision means writing a new ADR, not editing the old one
 
 | # | Document | What it covers |
 | --- | --- | --- |
-| 19 | [Phase 1A Report](19_PHASE_1A_REPORT.md) | Completion report for the platform skeleton: objectives vs. outcome, isolation results, verification performed, decisions, defects, known gaps |
+| 19 | [Phase 1A Report](19_PHASE_1A_REPORT.md) | Completion report for the platform skeleton, **as remediated**: the four security findings and their fixes, the role and credential model, tests with observed results, migration/rollback evidence, the green CI run, and remaining gaps |
 | — | [Architecture Decision Records](adr/README.md) | ADR-001 … ADR-015 — the binding decisions |
 
 ## Agent prompts
@@ -75,7 +75,9 @@ decision means writing a new ADR, not editing the old one
 code: the platform foundation and enforced tenant isolation, and deliberately no
 business-intelligence functionality.
 
-Phase 1B is ready to begin conditional on gap **G1** — the CI pipeline is authored but has
-never executed. Product-owner questions Q1–Q4 from
+Phase 1A was remediated on 2026-08-07 after a review found four security defects
+(analytical isolation, production token verification, worker privileges, audit
+tamper-evidence). All four are fixed and evidenced; CI runs green. Product-owner
+questions Q1–Q4 from
 [`17_PHASE_0_ARCHITECTURE_REVIEW.md`](17_PHASE_0_ARCHITECTURE_REVIEW.md) remain open and
 gate the wider Phase 1 scope.
