@@ -5,3 +5,7 @@
 packages:
   - 'apps/web'
   - 'packages/*'
+  # The browser suite (ADR-001's `tests/e2e`). A workspace member so it shares
+  # the repository's TypeScript settings, but its `test` script is a no-op: it
+  # needs a running stack and is invoked by its own CI job, not by `pnpm -r test`.
+  - 'tests/e2e'

@@ -243,6 +243,74 @@ jobs:
       - run: pnpm -r test
       - run: pnpm --filter @eip/web build
 
+  # ---------------------------------------------------------------------------
+  # RELEASE-GATING. The browser suite (ADR-001's `tests/e2e`, absent until now —
+  # gap G3). Its own job because it needs the whole stack plus a browser, and
+  # because a failure here should name the guarantee rather than "the web build
+  # broke".
+  # ---------------------------------------------------------------------------
+  browser-e2e:
+    name: 'SECURITY: tenant isolation in the browser'
+    runs-on: ubuntu-latest
+
+    env:
+      EIP_API_BASE_URL: http://localhost:8000
+      EIP_WEB_BASE_URL: http://localhost:3000
+      EIP_ENV: local
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Start the stack
+        run: docker compose -f infra/docker-compose.yml --profile app up -d --build --wait
+
+      - name: Seed two organizations
+        # Two, not one. Tenant isolation cannot be observed with a single
+        # tenant, and this suite exists to observe it.
+        run: |
+          docker compose -f infra/docker-compose.yml exec -T api \
+            sh -c "cd /app/apps/api && python -m eip.scripts.seed_demo"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install the browser
+        run: pnpm --filter @eip/e2e exec playwright install --with-deps chromium
+
+      - name: Build and start the web application
+        run: |
+          pnpm --filter @eip/web build
+          pnpm --filter @eip/web start &
+          npx --yes wait-on http://localhost:3000/sign-in --timeout 90000
+
+      - name: 'SECURITY: header and URL manipulation toward another tenant'
+        run: pnpm --filter @eip/e2e exec playwright test
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-diagnostics
+          # Redacted at capture (`support/diagnostics.ts`). Playwright's trace
+          # and video are disabled precisely because they would record complete
+          # request headers, and this artefact is downloadable.
+          path: |
+            tests/e2e/playwright-report/
+            tests/e2e/test-results/
+          retention-days: 7
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml --profile app logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --profile app down -v
+
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest

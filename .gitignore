@@ -39,3 +39,8 @@ Thumbs.db
 # --- local infra state ---
 infra/.data/
 .secrets/
+
+# Playwright output. Screenshots and reports are redacted at capture, but they
+# are still failure artefacts and do not belong in the repository.
+tests/e2e/playwright-report/
+tests/e2e/test-results/

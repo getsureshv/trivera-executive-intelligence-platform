@@ -1,0 +1,12 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "moduleResolution": "Bundler"
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "playwright-report", "test-results"]
+}

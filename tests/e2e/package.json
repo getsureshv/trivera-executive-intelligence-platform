@@ -1,0 +1,20 @@
+{
+  "name": "@eip/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser end-to-end tests — release-gating tenant isolation in the browser",
+  "scripts": {
+    "test": "echo \"e2e runs via 'pnpm e2e' — it needs a running stack\" && exit 0",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@eip/config": "workspace:*",
+    "@playwright/test": "^1.49.1",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "typescript": "^5.7.2"
+  }
+}
