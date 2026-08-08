@@ -3,8 +3,9 @@
 Date: 2026-08-07
 Status: **Remediated.** Supersedes the first version of this report, which
 overstated four guarantees — see *Corrections* below.
-Commits: `d766783` (initial), `450aab5` (remediation), `c12ef30` (CI fixes)
-CI: [run 31230016910](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31230016910)
+Commits: `d766783` (initial), `450aab5` (remediation), `c12ef30` (CI fixes),
+`b7b5d35` (G10 — per-tenant analytical credentials)
+CI: [run 31233689164](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31233689164)
 — **all 5 jobs green**
 Governed by: [ADR-001](adr/ADR-001-repository-architecture.md) …
 [ADR-016](adr/ADR-016-bounded-context-enforcement.md)
@@ -32,9 +33,11 @@ The four defects, and what was actually true at the time:
 | 3 | The worker ran on a constrained credential | The worker held a reusable **`BYPASSRLS`** credential |
 | 4 | Privileged audit deletion was detectable | Tail, prefix, and **total deletion were undetectable**; an empty chain verified as intact |
 
-All four are fixed and proven. **220 tests pass** (188 API + 16 worker + 7 web +
-10 shell-script cases), CI is green end to end, and the remaining gaps are
-listed honestly rather than discovered later.
+All four are fixed and proven, and the residual risk one of them left behind
+(**G10** — a shared credential that could assume any tenant) has since been
+eliminated as well. **232 tests pass** (199 API + 16 worker + 7 web + 10
+shell-script cases), CI is green end to end, and the remaining gaps are listed
+honestly rather than discovered later.
 
 ---
 
@@ -89,12 +92,17 @@ on "only the current tenant's schema".
 After the role switch, a statement naming another tenant's schema is refused by
 PostgreSQL with `permission denied` — regardless of how the SQL was built.
 
-**Residual risk, stated plainly:** `eip_app` is a member of every tenant role,
-so code that *deliberately* assumed the wrong tenant's role would succeed. It is
-bounded by a single `SET ROLE` call site, a handle/context match check, and an
-architecture test. Eliminating it requires per-tenant login credentials and
-pools — ADR-003 Tier 2 — which needs the `SecretStore` adapter that arrives in
-Phase 2.
+**Superseded by the G10 fix (commit `b7b5d35`).** The design above left a
+residual: `eip_app` was a member of every tenant role, so code that
+*deliberately* assumed the wrong tenant's role would have succeeded. PostgreSQL
+enforced the boundary only *after* the switch, and the switch was an application
+decision.
+
+That residual is now eliminated. Each tenant has its **own login role and its
+own password**; `eip_app` holds no privilege on any tenant schema, is a member of
+no tenant role, and is refused `SET ROLE`. The mechanism is gone from the
+codebase entirely — the architecture contract asserts `SET ROLE` appears
+nowhere. See *Finding G10* below.
 
 ### F2 — Production OIDC verification
 
@@ -177,16 +185,49 @@ not.* An owner can drop the trigger, rewrite the checkpoint, and reconstruct a
 consistent chain. Detecting that requires exporting checkpoints outside this
 database, which Phase 1A does not do.
 
+### G10 — Per-tenant analytical credentials
+
+**Was:** the F1 fix gave each tenant its own `NOLOGIN` role and had `eip_app`
+assume one per transaction via `SET LOCAL ROLE`. Enforced by PostgreSQL, but
+only once the switch had happened — so one credential could still reach every
+tenant, and *which* tenant it reached was a choice the application made. Code
+naming tenant B while serving tenant A would have been obeyed.
+
+**Now:** each tenant has its own **login** role with its own generated password,
+held in the `SecretStore`. There is no membership and no role to assume. A
+connection *is* tenant A and has no means of becoming tenant B, so the same
+coding error yields `permission denied` rather than data.
+
+- `eip_app` holds no privilege on any tenant schema and is a member of no tenant
+  role; startup refuses to boot otherwise.
+- `SET ROLE` is removed from the codebase; the architecture contract asserts it
+  appears nowhere.
+- Passwords go straight from generation to the `SecretStore`. The tenant row
+  stores a `SecretRef` — a logical name and a version — so a dump of the control
+  plane yields no credential material.
+- `TenantPoolRegistry`: one pool per tenant, bounded with LRU and idle eviction.
+  A pool is a cache, so eviction costs a reconnection and never access;
+  PostgreSQL's `max_connections` is a hard cluster limit.
+- Migration `0003` revokes every `eip_t_*` membership from `eip_app` and strips
+  residual schema grants from the first implementation. Its downgrade
+  deliberately does **not** restore them — rolling back application code does not
+  make handing that capability back acceptable.
+
+**`SecretStore` adapters** now exist: `FileSecretStore` (local/ci/dev, `0600`,
+mode enforced on read) and `InMemorySecretStore` (tests). There is **no
+production adapter**, and `build_secret_store` refuses to start in a
+production-like environment rather than falling back to plaintext on disk.
+
 ---
 
 ## Database role and credential model
 
-| Role | superuser | bypassrls | inherit | createrole | Used by |
+| Role | login | superuser | bypassrls | inherit | Reaches |
 | --- | --- | --- | --- | --- | --- |
-| `eip_app` | no | **no** | **no** | no | every request and every job |
-| `eip_platform` | no | **yes** | no | yes | audited platform-admin operations; owns the dispatch function |
-| `eip_migrator` | no | no | no | no | Alembic only; member of `eip_platform` so migrations can assign function ownership |
-| `eip_t_<uuid>` | no | no | no | no | never logs in; assumed via `SET LOCAL ROLE` |
+| `eip_app` | yes | no | **no** | **no** | control plane only (RLS). **No privilege on any tenant schema; member of no tenant role** |
+| `eip_platform` | yes | no | **yes** | no | provisioning and audited platform-admin operations |
+| `eip_migrator` | yes | no | no | no | Alembic only; member of `eip_platform` so migrations can assign function ownership |
+| `eip_t_<uuid>` | **yes** | no | no | no | **exactly one schema — its own.** Its own password, held in the `SecretStore` |
 
 **Connection routing**
 
@@ -194,9 +235,10 @@ database, which Phase 1A does not do.
 Control plane   eip_app       → public schema; RLS scoped by app.tenant_id
                                 (SET LOCAL, transaction-scoped)
 
-Analytical      eip_app       → SET LOCAL ROLE eip_t_<uuid>
-                                current_user becomes the tenant role; PostgreSQL
-                                denies any other tenant's schema outright
+Analytical      eip_t_<uuid>  → its OWN pool, authenticated with its OWN
+                                password. Nothing is assumed and nothing is
+                                switched; the connection can only ever be one
+                                tenant. Pools are bounded (LRU + idle TTL)
 
 Principal       eip_app       → app.user_id only, for membership lookup at
                                 sign-in (policy membership_self_select).
@@ -209,10 +251,11 @@ Worker          eip_app       → constrained engine only; no platform engine is
                                 ever constructed
 ```
 
-One pool per login role. No per-tenant credential exists, so there is no
-per-tenant secret to store or rotate. `SET LOCAL` is transaction-scoped, so no
-pooled connection carries a tenant role or tenant setting into the next
-checkout — asserted by test.
+The control plane uses one pool. The analytical plane uses **one pool per
+tenant**, each bound to that tenant's own credential — so a returned connection
+cannot change tenants, because there is no role to switch. Per-tenant passwords
+are generated at provisioning and reachable only through the `SecretStore`;
+rotation is supported and evicts the tenant's pool. Asserted by test.
 
 **Verified at runtime:**
 
@@ -224,6 +267,10 @@ eip_platform  super=f  bypassrls=t  inherit=f
 eip_audit_chain_advance    owner=eip_migrator  bypassrls=false
 eip_audit_chain_offboard   owner=eip_migrator  bypassrls=false
 eip_outbox_pending_tenants owner=eip_platform  bypassrls=true
+
+eip_app -> tenant-role memberships: 0
+eip_app -> USAGE on any tenant schema: false
+eip_app -> SET ROLE <tenant>: permission denied
 ```
 
 ---
@@ -237,7 +284,7 @@ eip_outbox_pending_tenants owner=eip_platform  bypassrls=true
 | `security/test_oidc_verification.py` | **33** | **new** | F2 — acceptance, wrong issuer/audience/key, expiry, unknown/missing `kid`, `alg=none`, HS256 confusion, environment gating, rotation |
 | `security/test_tenant_isolation.py` | 28 | changed | Control-plane isolation, 3 layers |
 | `security/test_audit_tamper_evidence.py` | **23** | **new** | F4 — field coverage, mutation, all four deletion classes, checkpoint protection, offboarding, documented limits |
-| `security/test_analytical_isolation.py` | **16** | **new** | F1 — role model, cross-schema denial, joins, `search_path`, pooling, guards, negative control |
+| `security/test_analytical_credentials.py` | **27** | **new** | G10 — own-tenant read, fully-qualified cross-tenant denial, credential cannot assume another role, pooled reuse cannot change tenants, workers hold only the active credential, no credential in repr/logs/URLs/rows. Replaces `test_analytical_isolation.py` |
 | `worker/test_worker_isolation.py` | 16 | **rewritten** | F3 — inspects `pg_roles`/`pg_proc` directly, not behaviour |
 | `security/test_audit_and_authorization.py` | 9 | changed | Append-only grants, capabilities |
 | `security/test_privileged_platform_access.py` | 8 | unchanged | Privileged path is genuinely privileged and gated |
@@ -250,7 +297,7 @@ eip_outbox_pending_tenants owner=eip_platform  bypassrls=true
 Observed locally and in CI:
 
 ```
-API      188 passed
+API      199 passed
 worker    16 passed
 web        7 pass, 0 fail
 scripts   10 passed
@@ -264,6 +311,7 @@ scripts   10 passed
 | F2 | `test_a_development_token_is_rejected_by_the_production_verifier`, `test_hs256_token_is_rejected_by_the_production_verifier` |
 | F3 | `test_worker_role_has_no_bypassrls`, `test_worker_credential_cannot_read_another_tenants_rows_directly` |
 | F4 | `test_final_event_deletion_is_detected`, `test_total_deletion_is_detected`, `test_mutating_a_field_breaks_the_chain[occurred_at/actor_type/trace_id/request_id]` |
+| G10 | `test_runtime_role_is_a_member_of_no_tenant_role`, `test_runtime_role_cannot_set_role_to_a_tenant`, `test_tenant_a_cannot_set_role_to_tenant_b`, `test_a_connection_is_always_the_same_tenant` |
 
 Three tests are **negative controls** — they prove the other tests are not
 passing vacuously: `TestNegativeControl::test_privileged_role_reads_both_tenants`
@@ -284,6 +332,7 @@ offboard function, the outbox dispatch function, and the grant revocations.
 | `alembic downgrade 0001_control_plane` | **pass** |
 | `alembic upgrade head` (re-apply) | **pass** |
 | `alembic downgrade base` → `upgrade head` (CI) | **pass** |
+| `0003_tenant_credentials` upgrade → downgrade `0002` → re-upgrade | **pass** |
 | Model-drift autogenerate | **empty diff** |
 
 Two defects were caught by running these rather than assuming them:
@@ -337,14 +386,15 @@ script that has its own 10-case test, run in CI before the check itself.
 | G5 | **OpenTelemetry is wired but never exercised.** Disabled by default; no collector has received a span. | Low | 1B |
 | G7 | **Dramatiq is a connectivity check only.** No actors, queues, or per-tenant fairness caps. | Low — by design | 2 |
 | G9 | Compose health checks use `urllib`, so they exercise HTTP but not the dependency graph `/ready` does. | Informational | — |
-| G10 | **Per-tenant analytical credentials are not implemented.** `eip_app` can `SET ROLE` to any tenant role; see F1 residual risk. | Medium | 2 (ADR-003 Tier 2) |
+| G14 | **No production `SecretStore` adapter.** `FileSecretStore` is local/ci/dev only; production-like startup fails closed rather than falling back. | Medium | 2 |
 | G11 | **Audit checkpoints are not exported off-box.** A database owner can rewrite them undetected; see F4 boundary. | Medium | 1B/2 |
 | G12 | **Frontend tests cover the error type only.** 7 tests, no component or route coverage. | Medium | 1B |
 | G13 | **The OIDC adapter has never run against a real IdP.** Verified against in-process RSA keys and a local JWKS server; discovery is untested against a live provider. | Medium | 1B |
 
-G1 (CI never run), G2 (zero frontend tests), G6 (uncommitted OpenAPI), and G8
-(unratified `import-linter` deviation, now [ADR-016](adr/ADR-016-bounded-context-enforcement.md))
-are **closed**.
+G1 (CI never run), G2 (zero frontend tests), G6 (uncommitted OpenAPI), G8
+(unratified `import-linter` deviation, now
+[ADR-016](adr/ADR-016-bounded-context-enforcement.md)), and **G10** (shared
+analytical credential — closed by commit `b7b5d35`) are **closed**.
 
 ---
 
@@ -353,9 +403,10 @@ are **closed**.
 | Risk | Why it matters |
 | --- | --- |
 | **Every new tenant-scoped table is a chance to forget RLS.** | Enforced by a test and a startup assertion — but a developer can add a table *and* add it to `GLOBAL_TABLES` to make the test pass. Review of that list is load-bearing. `audit_chain_head` is the first justified entry; the justification is in the code. |
-| **Every new analytical query path is a chance to skip `SET ROLE`.** | Isolation holds only inside `analytical_session`. The architecture test confines `SET ROLE` to one module, but a query issued on a plain session would simply be denied — a visible failure, not a leak. |
+| **Every new analytical query path must go through `analytical_session`.** | A query issued on the control-plane session would be denied outright — a visible failure, not a leak, because `eip_app` holds nothing on tenant schemas. |
+| **Per-tenant pools consume connections.** | Bounded with LRU and idle eviction, and asserted by test. `max_connections` remains a hard cluster limit worth monitoring as tenant count grows. |
 | **Cache does not yet exist.** | ADR-007 §4 requires `auth_scope_hash` in every cache key. The highest-severity defect from the Phase 0 review is *not yet possible*, and must be prevented the moment caching appears. |
-| **The residual `SET ROLE` risk is real.** | Documented, bounded, and tested — but not eliminated until Tier 2. |
+| **Credential rotation is implemented but not scheduled.** | `rotate_credential` exists and evicts the tenant's pool; nothing calls it on a cadence yet. |
 
 ---
 
@@ -388,9 +439,9 @@ The conditions on proceeding to Phase 1B:
 
 1. **Answer Q1–Q4 and confirm PO-005.** Q2 (private-network connectivity) can
    change Phase 2's scope by weeks.
-2. **Accept or reject the two documented residual risks** (G10, G11). Both are
-   defensible for Phase 1A and both have a named remediation path; neither
-   should be discovered later as a surprise.
+2. **Accept or reject the remaining documented boundary** (G11: a database
+   owner can rewrite the audit checkpoint undetected). G10 is closed — analytical
+   isolation no longer depends on any application choice.
 3. **Treat G13 as a Phase 1B entry task.** The OIDC adapter is correct against
    synthetic keys; it has not met a real identity provider, and that is where
    discovery, clock skew, and claim-shape surprises live.
