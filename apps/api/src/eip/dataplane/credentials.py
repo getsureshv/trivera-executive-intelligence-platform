@@ -111,9 +111,18 @@ class AnalyticalCredentialProvider:
             database=self._database,
         )
 
-    async def store_new_password(self, tenant_id: uuid.UUID, password: SecretValue) -> SecretRef:
+    async def store_new_password(
+        self,
+        tenant_id: uuid.UUID,
+        password: SecretValue,
+        *,
+        provisioning_attempt: int | None = None,
+    ) -> SecretRef:
         """Persist a freshly generated password and return its reference."""
-        ref = await self._secrets.put(tenant_id, ANALYTICAL_SECRET_NAME, password)
+        logical_name = ANALYTICAL_SECRET_NAME
+        if provisioning_attempt is not None:
+            logical_name = f"{logical_name}-attempt-{provisioning_attempt}"
+        ref = await self._secrets.put(tenant_id, logical_name, password)
         _log.info(
             "credentials.stored",
             tenant_id=str(tenant_id),

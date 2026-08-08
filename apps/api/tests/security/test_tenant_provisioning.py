@@ -47,7 +47,12 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from eip.dataplane.credentials import ANALYTICAL_SECRET_NAME, AnalyticalCredentialProvider
-from eip.dataplane.interfaces import DataPlaneHandle, TenantDataPlane, TenantRef
+from eip.dataplane.interfaces import (
+    DataPlaneHandle,
+    ProvisioningFence,
+    TenantDataPlane,
+    TenantRef,
+)
 from eip.dataplane.pool import TenantPoolRegistry
 from eip.dataplane.schema_per_tenant import SchemaPerTenantDataPlane
 from eip.dataplane.session import analytical_session
@@ -76,13 +81,13 @@ pytestmark = [pytest.mark.security, pytest.mark.integration]
 ELEVATION = {"X-Elevation-Reason": "provisioning a tenant for an onboarding customer"}
 
 
-def _secret_ref(tenant_id: uuid.UUID, version: str) -> SecretRef:
+def _secret_ref(tenant_id: uuid.UUID, logical_name: str, version: str) -> SecretRef:
     """Rebuild the reference the tenant row stores.
 
     The row keeps a logical name and a version, never a value. Reassembling it
     here is what lets a test fetch the real password and then hunt for it.
     """
-    return SecretRef(tenant_id=tenant_id, logical_name=ANALYTICAL_SECRET_NAME, version=version)
+    return SecretRef(tenant_id=tenant_id, logical_name=logical_name, version=version)
 
 
 # =============================================================================
@@ -148,7 +153,9 @@ class _BrokenDataPlane:
     async def handle(self, tenant: TenantRef, secret_ref: Any = None) -> DataPlaneHandle:
         return await self._real.handle(tenant, secret_ref)
 
-    async def provision(self, tenant: TenantRef) -> DataPlaneHandle:
+    async def provision(
+        self, tenant: TenantRef, *, fence: ProvisioningFence | None = None
+    ) -> DataPlaneHandle:
         self.calls += 1
         raise ProgrammingError(self._message, {}, Exception("permission denied"))
 
@@ -203,6 +210,32 @@ async def _tenant_row(engine: AsyncEngine, tenant_id: uuid.UUID) -> dict[str, An
             await conn.execute(text("SELECT * FROM tenant WHERE id = :id"), {"id": tenant_id})
         ).mappings()
         return dict(next(iter(row)))
+
+
+async def _provisioning_side_effects(
+    engine: AsyncEngine, tenant_id: uuid.UUID
+) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]]]:
+    """Snapshot the durable effects a losing attempt must never append."""
+    async with engine.connect() as conn:
+        audit_rows = (
+            await conn.execute(
+                text(
+                    "SELECT seq, action, outcome, detail FROM audit_event "
+                    "WHERE tenant_id = :id ORDER BY seq"
+                ),
+                {"id": tenant_id},
+            )
+        ).all()
+        outbox_rows = (
+            await conn.execute(
+                text(
+                    "SELECT id, topic, payload FROM outbox "
+                    "WHERE tenant_id = :id ORDER BY created_at, id"
+                ),
+                {"id": tenant_id},
+            )
+        ).all()
+    return [tuple(row) for row in audit_rows], [tuple(row) for row in outbox_rows]
 
 
 # =============================================================================
@@ -387,6 +420,8 @@ class TestPartialFailureIsRecoverable:
         self,
         platform_sessions: async_sessionmaker[AsyncSession],
         data_plane: SchemaPerTenantDataPlane,
+        secret_store: FileSecretStore,
+        credentials: AnalyticalCredentialProvider,
         seeded: Fixtures,
         cleanup_tenants: list[uuid.UUID],
     ) -> None:
@@ -551,10 +586,12 @@ class TestDuplicatesAndRaces:
         release = asyncio.Event()
 
         class _HangingPlane(_BrokenDataPlane):
-            async def provision(self, tenant: TenantRef) -> DataPlaneHandle:
+            async def provision(
+                self, tenant: TenantRef, *, fence: ProvisioningFence | None = None
+            ) -> DataPlaneHandle:
                 started.set()
                 await release.wait()
-                return await self._real.provision(tenant)
+                return await self._real.provision(tenant, fence=fence)
 
         slow = TenantProvisioningWorkflow(
             sessions=platform_sessions, data_plane=_HangingPlane(data_plane, "unused")
@@ -603,6 +640,150 @@ class TestDuplicatesAndRaces:
         assert recovered.provisioning_state == ProvisioningState.READY.value
 
 
+class TestStaleAttemptFencing:
+    async def test_late_success_cannot_overwrite_the_takeover_winner(
+        self,
+        platform_sessions: async_sessionmaker[AsyncSession],
+        data_plane: SchemaPerTenantDataPlane,
+        secret_store: FileSecretStore,
+        credentials: AnalyticalCredentialProvider,
+        seeded: Fixtures,
+        platform_engine: AsyncEngine,
+        cleanup_tenants: list[uuid.UUID],
+    ) -> None:
+        """Attempt 1 returns after attempt 2 is ready; its settle is fenced out."""
+        context = _platform_context(seeded.user_platform.id)
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class _LateSuccessPlane(_BrokenDataPlane):
+            async def provision(
+                self, tenant: TenantRef, *, fence: ProvisioningFence | None = None
+            ) -> DataPlaneHandle:
+                started.set()
+                await release.wait()
+                return await self._real.provision(tenant, fence=fence)
+
+        loser = TenantProvisioningWorkflow(
+            sessions=platform_sessions,
+            data_plane=_LateSuccessPlane(data_plane, "unused"),
+            stale_after_seconds=0,
+        )
+        winner = TenantProvisioningWorkflow(
+            sessions=platform_sessions, data_plane=data_plane, stale_after_seconds=0
+        )
+        registered = await loser.register(context, slug="fenced-success", name="Fenced Success")
+        cleanup_tenants.append(registered.id)
+
+        late = asyncio.create_task(loser.provision(context, registered.id))
+        await asyncio.wait_for(started.wait(), timeout=10)
+        winning = await winner.provision(context, registered.id)
+        before_row = await _tenant_row(platform_engine, registered.id)
+        before_effects = await _provisioning_side_effects(platform_engine, registered.id)
+
+        release.set()
+        with pytest.raises(ProvisioningError, match="superseded"):
+            await late
+
+        after_row = await _tenant_row(platform_engine, registered.id)
+        after_effects = await _provisioning_side_effects(platform_engine, registered.id)
+        assert winning.provisioning_attempts == 2
+        assert before_row == after_row
+        assert before_effects == after_effects
+
+        winner_ref = _secret_ref(
+            registered.id,
+            str(after_row["analytical_secret_name"]),
+            str(after_row["analytical_secret_version"]),
+        )
+        stale_ref = _secret_ref(registered.id, f"{ANALYTICAL_SECRET_NAME}-attempt-1", "1")
+        with pytest.raises(NotFoundError):
+            await secret_store.describe(stale_ref)
+
+        winner_handle = DataPlaneHandle(
+            tenant_id=registered.id,
+            mode=workflow_mode(winner),
+            namespace=str(after_row["analytical_schema"]),
+            role=str(after_row["analytical_role"]),
+            secret_ref=winner_ref,
+        )
+        pools = TenantPoolRegistry(
+            credentials=credentials,
+            max_tenants=1,
+            pool_size=1,
+            max_overflow=0,
+            idle_ttl_seconds=300,
+        )
+        try:
+            async with analytical_session(
+                pools,
+                _tenant_context(registered.id, seeded.user_platform.id),
+                winner_handle,
+            ) as session:
+                identity = (
+                    await session.execute(
+                        text(
+                            "SELECT current_user, "
+                            "has_schema_privilege(current_user, :schema, 'USAGE')"
+                        ),
+                        {"schema": winner_handle.namespace},
+                    )
+                ).one()
+            assert identity == (winner_handle.role, True)
+        finally:
+            await pools.close()
+
+    async def test_late_failure_cannot_mark_the_takeover_winner_failed(
+        self,
+        platform_sessions: async_sessionmaker[AsyncSession],
+        data_plane: SchemaPerTenantDataPlane,
+        seeded: Fixtures,
+        platform_engine: AsyncEngine,
+        cleanup_tenants: list[uuid.UUID],
+    ) -> None:
+        """Attempt 1 fails after attempt 2 is ready; its failure is fenced out."""
+        context = _platform_context(seeded.user_platform.id)
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class _LateFailurePlane(_BrokenDataPlane):
+            async def provision(
+                self, tenant: TenantRef, *, fence: ProvisioningFence | None = None
+            ) -> DataPlaneHandle:
+                started.set()
+                await release.wait()
+                raise RuntimeError("late failure from superseded attempt")
+
+        loser = TenantProvisioningWorkflow(
+            sessions=platform_sessions,
+            data_plane=_LateFailurePlane(data_plane, "unused"),
+            stale_after_seconds=0,
+        )
+        winner = TenantProvisioningWorkflow(
+            sessions=platform_sessions, data_plane=data_plane, stale_after_seconds=0
+        )
+        registered = await loser.register(context, slug="fenced-failure", name="Fenced Failure")
+        cleanup_tenants.append(registered.id)
+
+        late = asyncio.create_task(loser.provision(context, registered.id))
+        await asyncio.wait_for(started.wait(), timeout=10)
+        winning = await winner.provision(context, registered.id)
+        before_row = await _tenant_row(platform_engine, registered.id)
+        before_effects = await _provisioning_side_effects(platform_engine, registered.id)
+
+        release.set()
+        with pytest.raises(ProvisioningError, match="superseded"):
+            await late
+
+        after_row = await _tenant_row(platform_engine, registered.id)
+        after_effects = await _provisioning_side_effects(platform_engine, registered.id)
+        assert winning.provisioning_attempts == 2
+        assert after_row["provisioning_state"] == ProvisioningState.READY.value
+        assert after_row["provisioning_error"] is None
+        assert before_row == after_row
+        assert before_effects == after_effects
+
+
 # =============================================================================
 # credentials appear nowhere
 # =============================================================================
@@ -632,7 +813,11 @@ class TestCredentialsAreNeverExposed:
         cleanup_tenants.append(record.id)
 
         row = await _tenant_row(platform_engine, record.id)
-        secret_ref = _secret_ref(record.id, str(row["analytical_secret_version"]))
+        secret_ref = _secret_ref(
+            record.id,
+            str(row["analytical_secret_name"]),
+            str(row["analytical_secret_version"]),
+        )
         password = (
             await secret_store.get(secret_ref, purpose="assert the credential leaks nowhere")
         ).reveal()
@@ -804,7 +989,11 @@ class TestProvisionedTenantsAreIsolated:
                 mode=workflow_mode(workflow),
                 namespace=first.analytical_schema,
                 role=str(first.analytical_role),
-                secret_ref=_secret_ref(first.id, str(row_first["analytical_secret_version"])),
+                secret_ref=_secret_ref(
+                    first.id,
+                    str(row_first["analytical_secret_name"]),
+                    str(row_first["analytical_secret_version"]),
+                ),
             )
             tenant_context = _tenant_context(first.id, seeded.user_platform.id)
 

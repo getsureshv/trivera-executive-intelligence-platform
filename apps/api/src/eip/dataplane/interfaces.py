@@ -41,6 +41,18 @@ class DataPlaneStatus(StrEnum):
     OFFBOARDING = "offboarding"
 
 
+class ProvisioningFenceRejectedError(RuntimeError):
+    """The caller no longer owns the provisioning attempt it presented."""
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class ProvisioningFence:
+    """Opaque attempt token that every mutating data plane must enforce."""
+
+    attempt: int
+
+
 @final
 @dataclass(frozen=True, slots=True)
 class TenantRef:
@@ -130,7 +142,9 @@ class TenantDataPlane(Protocol):
         """The isolation mode this implementation provides."""
         ...
 
-    async def provision(self, tenant: TenantRef) -> DataPlaneHandle:
+    async def provision(
+        self, tenant: TenantRef, *, fence: ProvisioningFence | None = None
+    ) -> DataPlaneHandle:
         """Create the tenant's storage. Must be idempotent."""
         ...
 

@@ -351,6 +351,67 @@ the process was.
 | No background retry | A failed tenant waits for an operator. The outbox event exists, so a retry actor is a small addition when there is a reason for one. |
 | G11, G14 | Unchanged Phase 1A residuals. |
 
+### Post-completion remediation — stale-attempt fencing
+
+**Outcome: PASS (2026-08-08).** Independent review after this report was first
+completed found that stale takeover was fenced only at claim time. Both settlement
+updates matched the tenant id alone, and the data-plane port carried no attempt token.
+An attempt whose claim had expired could therefore resume after its replacement and:
+
+- mark the replacement `ready` or `failed`;
+- append the wrong audit and outbox events;
+- overwrite the analytical login password and its `SecretStore` value; or
+- leave the tenant row's `SecretRef` inconsistent with the password PostgreSQL accepted.
+
+The existing atomic `provisioning_attempts` counter is now the fencing token; no schema
+migration was needed. The token returned by the conditional claim crosses the
+`TenantDataPlane` port. Success and failure settlement require tenant id,
+`in_progress`, and the exact attempt. The schema-per-tenant adapter enforces the same
+predicate with `SELECT ... FOR UPDATE` before generating or storing a credential or
+executing role/schema DDL, and holds that row lock through the SecretStore write and
+PostgreSQL mutation. Credentials are named per attempt, so a losing attempt cannot
+overwrite the winner's stored value.
+
+The adversarial regression pauses attempt A before credential/role mutation, lets stale
+attempt B take over and complete, then resumes A. PostgreSQL rejects A's fence before
+any mutation. The test proves all of the following from observed state:
+
+- B's stored credential still authenticates as B's tenant login;
+- B's login retains `USAGE` on B's analytical schema;
+- A wrote no attempt-scoped secret;
+- the final tenant row remains B's exact settled row; and
+- A appends no audit or outbox event.
+
+A second regression covers a late failure from A after B completes and proves the same
+row and event invariants. Both losing callers receive an explicit `superseded` error
+rather than the false claim that their result was recorded.
+
+Observed verification in the documented Docker/PostgreSQL path:
+
+```text
+tests/security/test_tenant_provisioning.py     25 passed
+apps/api complete suite                       252 passed
+apps/worker PostgreSQL suite                  16 passed
+apps/web                                      7 passed; build clean
+mypy --strict                                 clean, 40 source files
+ruff format --check / ruff check              clean, 72 files
+alembic downgrade base -> upgrade head        pass
+model-drift autogenerate                      empty
+```
+
+The first PostgreSQL execution found a test-only teardown error after every adversarial
+security assertion had passed (`dispose_all` was not the registry API). It was corrected
+to `close`, and the complete 25-test suite was rerun: **25 passed, 0 failed**. No
+connector, ingestion, semantic-model, metric, dashboard, insight, or AI work began.
+
+The complete API run then caught one stale test assertion outside the focused suite: it
+still expected the pre-fence fixed secret logical name. The assertion was updated to the
+attempt-scoped name and the entire API suite was rerun: **252 passed, 0 failed**. Migration
+rollback/reapply and model drift were verified on a fresh Docker volume because the
+long-lived local test volume contained analytical schemas left by earlier test runs;
+the clean run downgraded `0004` through `0001` to base, reapplied through `0004`, and
+generated an empty drift revision.
+
 ---
 
 ## Task 3 — First browser end-to-end security test

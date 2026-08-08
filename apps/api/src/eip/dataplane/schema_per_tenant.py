@@ -52,6 +52,8 @@ from eip.dataplane.interfaces import (
     DataPlaneHealth,
     DataPlaneInfo,
     DataPlaneStatus,
+    ProvisioningFence,
+    ProvisioningFenceRejectedError,
     TenantRef,
 )
 from eip.platform.logging import get_logger
@@ -130,7 +132,9 @@ class SchemaPerTenantDataPlane:
 
     # --- lifecycle -------------------------------------------------------
 
-    async def provision(self, tenant: TenantRef) -> DataPlaneHandle:
+    async def provision(
+        self, tenant: TenantRef, *, fence: ProvisioningFence | None = None
+    ) -> DataPlaneHandle:
         """Create the tenant's schema and its dedicated login role.
 
         Idempotent, so a retried provisioning job is safe (ADR-009). Re-running
@@ -144,10 +148,33 @@ class SchemaPerTenantDataPlane:
         namespace = self.namespace_for(tenant)
         role = self.role_for(tenant)
 
-        password = generate_password()
-        secret_ref = await self._credentials.store_new_password(tenant.tenant_id, password)
-
         async with self._engine.begin() as conn:
+            if fence is not None:
+                owns_attempt = (
+                    await conn.execute(
+                        text(
+                            "SELECT 1 FROM tenant WHERE id = :tenant_id "
+                            "AND provisioning_state = 'in_progress' "
+                            "AND provisioning_attempts = :attempt FOR UPDATE"
+                        ),
+                        {"tenant_id": tenant.tenant_id, "attempt": fence.attempt},
+                    )
+                ).scalar_one_or_none()
+                if owns_attempt is None:
+                    raise ProvisioningFenceRejectedError(
+                        f"Provisioning attempt {fence.attempt} no longer owns tenant "
+                        f"{tenant.tenant_id}."
+                    )
+
+            # Generate and persist only after the fence is locked. A stale
+            # caller therefore cannot write SecretStore or rotate the login.
+            # The row lock is held through both the external write and DDL, so
+            # takeover cannot split the credential from the PostgreSQL role.
+            password = generate_password()
+            secret_ref = await self._credentials.store_new_password(
+                tenant.tenant_id, password, provisioning_attempt=fence.attempt if fence else None
+            )
+
             # A LOGIN role with its own password. NOINHERIT because it should
             # never acquire anything through membership — it has none, and if
             # one were ever granted, this limits the damage.

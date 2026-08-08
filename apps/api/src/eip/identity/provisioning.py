@@ -78,7 +78,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from eip.dataplane.interfaces import TenantDataPlane, TenantRef
+from eip.dataplane.interfaces import ProvisioningFence, TenantDataPlane, TenantRef
 from eip.governance import audit, outbox
 from eip.identity.models import Tenant
 from eip.platform.context import PlatformContext
@@ -297,7 +297,8 @@ class TenantProvisioningWorkflow:
 
         try:
             handle = await self._data_plane.provision(
-                TenantRef(tenant_id=claimed.id, slug=claimed.slug)
+                TenantRef(tenant_id=claimed.id, slug=claimed.slug),
+                fence=ProvisioningFence(attempt=claimed.provisioning_attempts),
             )
         except Exception as exc:
             await self._record_failure(context, claimed, exc)
@@ -307,6 +308,11 @@ class TenantProvisioningWorkflow:
 
         try:
             return await self._settle(context, claimed, handle)
+        except ProvisioningError:
+            # _settle uses this to report that a newer stale-takeover attempt
+            # now owns the row. That is not a failure of this tenant, and must
+            # not flow through _record_failure and compete with the winner.
+            raise
         except Exception as exc:
             # The plane exists but the record of it does not. Marking failed is
             # correct: provision() is idempotent, so the retry rebuilds nothing
@@ -408,9 +414,27 @@ class TenantProvisioningWorkflow:
 
             tenant = (
                 await session.execute(
-                    update(Tenant).where(Tenant.id == claimed.id).values(**values).returning(Tenant)
+                    update(Tenant)
+                    .where(
+                        Tenant.id == claimed.id,
+                        Tenant.provisioning_state == ProvisioningState.IN_PROGRESS.value,
+                        Tenant.provisioning_attempts == claimed.provisioning_attempts,
+                    )
+                    .values(**values)
+                    .returning(Tenant)
                 )
-            ).scalar_one()
+            ).scalar_one_or_none()
+
+            if tenant is None:
+                _log.warning(
+                    "provisioning.settle_superseded",
+                    tenant_id=str(claimed.id),
+                    attempt=claimed.provisioning_attempts,
+                )
+                raise ProvisioningError(
+                    "This provisioning attempt was superseded by a newer attempt; "
+                    "its result was not recorded."
+                )
 
             await audit.record_platform_action(
                 session,
@@ -459,36 +483,56 @@ class TenantProvisioningWorkflow:
         window recovers it.
         """
         reason = summarise_failure(exc)
+        superseded = False
         try:
             async with platform_session(self._sessions, context) as session:
-                await session.execute(
+                result = await session.execute(
                     update(Tenant)
-                    .where(Tenant.id == claimed.id)
+                    .where(
+                        Tenant.id == claimed.id,
+                        Tenant.provisioning_state == ProvisioningState.IN_PROGRESS.value,
+                        Tenant.provisioning_attempts == claimed.provisioning_attempts,
+                    )
                     .values(
                         provisioning_state=ProvisioningState.FAILED.value,
                         provisioning_error=reason,
                     )
+                    .returning(Tenant.id)
                 )
-                await audit.record_platform_action(
-                    session,
-                    context,
-                    tenant_id=claimed.id,
-                    action=audit.AuditAction.TENANT_PROVISIONING_FAILED,
-                    resource_type="tenant",
-                    resource_id=str(claimed.id),
-                    outcome="failure",
-                    detail={"slug": claimed.slug, "reason": reason},
-                )
-                await outbox.publish(
-                    session,
-                    tenant_id=claimed.id,
-                    topic=outbox.Topic.TENANT_PROVISIONING_FAILED,
-                    payload={"tenant_id": str(claimed.id), "slug": claimed.slug},
-                    trace_id=context.trace_id,
-                )
+                if result.scalar_one_or_none() is None:
+                    _log.warning(
+                        "provisioning.failure_superseded",
+                        tenant_id=str(claimed.id),
+                        attempt=claimed.provisioning_attempts,
+                    )
+                    superseded = True
+                else:
+                    await audit.record_platform_action(
+                        session,
+                        context,
+                        tenant_id=claimed.id,
+                        action=audit.AuditAction.TENANT_PROVISIONING_FAILED,
+                        resource_type="tenant",
+                        resource_id=str(claimed.id),
+                        outcome="failure",
+                        detail={"slug": claimed.slug, "reason": reason},
+                    )
+                    await outbox.publish(
+                        session,
+                        tenant_id=claimed.id,
+                        topic=outbox.Topic.TENANT_PROVISIONING_FAILED,
+                        payload={"tenant_id": str(claimed.id), "slug": claimed.slug},
+                        trace_id=context.trace_id,
+                    )
         except Exception:  # pragma: no cover - defensive
             _log.error("provisioning.failure_not_recorded", tenant_id=str(claimed.id))
             return
+
+        if superseded:
+            raise ProvisioningError(
+                "This provisioning attempt was superseded by a newer attempt; "
+                "its failure was not recorded."
+            ) from exc
 
         _log.warning(
             "provisioning.failed",

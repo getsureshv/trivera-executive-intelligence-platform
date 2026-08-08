@@ -29,6 +29,7 @@ from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from eip.dataplane.credentials import ANALYTICAL_SECRET_NAME
 from eip.platform.context import ActorType, PlatformContext, Principal
 from eip.platform.db import platform_session
 from tests.conftest import Fixtures, auth, token_for
@@ -208,7 +209,7 @@ class TestElevationIsJustifiedAndAudited:
                 )
             ).one()
             assert credential.analytical_role
-            assert credential.analytical_secret_name == "analytical-db-password"
+            assert credential.analytical_secret_name == f"{ANALYTICAL_SECRET_NAME}-attempt-1"
             assert credential.analytical_secret_version
 
             # And the tenant's analytical namespace really was provisioned.
