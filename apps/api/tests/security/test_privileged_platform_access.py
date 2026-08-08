@@ -175,18 +175,27 @@ class TestElevationIsJustifiedAndAudited:
                 await session.execute(
                     text(
                         "SELECT action, resource_id, detail FROM audit_event "
-                        "WHERE tenant_id = :tenant_id"
+                        "WHERE tenant_id = :tenant_id AND action LIKE 'tenant.%' ORDER BY seq"
                     ),
                     {"tenant_id": new_tenant_id},
                 )
             ).all()
 
-            # The audit event lands in the NEW tenant's own chain, so the
+            # The audit events land in the NEW tenant's own chain, so the
             # customer can see that platform staff acted on their data.
-            assert len(events) == 1
-            assert events[0].action == "tenant.provisioned"
-            assert events[0].resource_id == str(new_tenant_id)
-            assert events[0].detail["elevation_reason"] == "onboarding a new customer"
+            #
+            # Two of them since Phase 1B: registration and provisioning are
+            # separate steps with a piece of DDL between, and an interrupted
+            # create has to leave the first one behind as evidence.
+            assert [event.action for event in events] == [
+                "tenant.registered",
+                "tenant.provisioned",
+            ]
+            assert all(event.resource_id == str(new_tenant_id) for event in events)
+            assert all(
+                event.detail["elevation_reason"] == "onboarding a new customer"
+                for event in events
+            )
 
             # The tenant's credential reference is recorded — a pointer, never
             # a value (ADR-015).

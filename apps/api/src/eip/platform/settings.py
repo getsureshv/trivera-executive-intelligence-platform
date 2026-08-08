@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     data_plane_mode: IsolationMode = IsolationMode.SCHEMA_PER_TENANT
     data_plane_schema_prefix: str = "tenant_"
 
+    # --- provisioning ------------------------------------------------------
+    #: How long a provisioning claim is honoured before another attempt may
+    #: take it over. A process that dies mid-provision leaves `in_progress`
+    #: behind; without an expiry that state blocks every future retry, which is
+    #: the half-created tenant this workflow exists to prevent.
+    provisioning_stale_after_seconds: Annotated[float, Field(gt=0, le=3600)] = 300.0
+
     # --- secrets (ADR-015) -------------------------------------------------
     #: Root for the filesystem secret store used in local/ci/dev. Must be
     #: outside the repository; `build_secret_store` refuses to select this

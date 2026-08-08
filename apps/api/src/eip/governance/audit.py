@@ -71,7 +71,9 @@ class AuditAction:
     CROSS_TENANT_ACCESS_ATTEMPTED = "tenant.access.cross_tenant_attempted"
 
     # administrative / configuration mutations
+    TENANT_REGISTERED = "tenant.registered"
     TENANT_PROVISIONED = "tenant.provisioned"
+    TENANT_PROVISIONING_FAILED = "tenant.provisioning_failed"
     TENANT_DEPROVISIONED = "tenant.deprovisioned"
     MEMBERSHIP_GRANTED = "membership.granted"
     MEMBERSHIP_REVOKED = "membership.revoked"
@@ -243,6 +245,7 @@ async def record_platform_action(
     action: str,
     resource_type: str,
     resource_id: str | None = None,
+    outcome: str = "success",
     detail: dict[str, Any] | None = None,
 ) -> AuditEvent:
     """Append an audit event for a privileged, cross-tenant operation.
@@ -269,6 +272,7 @@ async def record_platform_action(
         action=action,
         resource_type=resource_type,
         resource_id=resource_id,
+        outcome=outcome,
         detail=safe_detail,
     )
 

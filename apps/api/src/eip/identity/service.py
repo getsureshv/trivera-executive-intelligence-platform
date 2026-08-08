@@ -5,12 +5,21 @@ Two distinct surfaces, deliberately separated by *type*:
 * ``TenantReadService`` takes a ``TenantContext`` and can only ever see one
   tenant. Every method requires the context as an argument, so a caller cannot
   forget to scope.
-* ``TenantProvisioningService`` takes a ``PlatformContext``, uses the
-  ``BYPASSRLS`` role, and is the only code path that spans tenants. Its every
-  operation writes an audit event.
+* ``PlatformAdminService`` takes a ``PlatformContext``, uses the ``BYPASSRLS``
+  role, and is the only code path here that spans tenants. Its every operation
+  writes an audit event.
 
-The split is the point. If provisioning shared a service with reads, one
-mistaken parameter would turn a tenant-scoped call into a cross-tenant one.
+The split is the point. If privileged administration shared a service with
+reads, one mistaken parameter would turn a tenant-scoped call into a
+cross-tenant one.
+
+Tenant *provisioning* lived here until Phase 1B and now lives in
+``eip.identity.provisioning``. It moved because it stopped fitting this shape:
+everything here is one unit of work inside the caller's transaction, whereas
+provisioning owns three transactions with DDL between them and has to record a
+failure after the transaction that failed. Leaving the simpler `create_tenant`
+behind would have been worse than moving it — two provisioning paths, one of
+which silently cannot record a partial failure.
 """
 
 from __future__ import annotations
@@ -18,11 +27,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from eip.dataplane.interfaces import TenantDataPlane, TenantRef
 from eip.governance import audit
 from eip.identity.models import AppUser, Membership, Tenant
 from eip.platform.context import Capability, PlatformContext, RoleCode, TenantContext
@@ -135,98 +143,13 @@ class TenantReadService:
         ]
 
 
-class TenantProvisioningService:
-    """The privileged, cross-tenant path (ADR-003 §3, ADR-010 §5).
+class PlatformAdminService:
+    """Privileged, cross-tenant membership administration (ADR-010 §5).
 
-    Every method takes a ``PlatformContext`` — which cannot be constructed
-    without a recorded reason — runs on the ``eip_platform`` role, and emits an
-    audit event into the target tenant's own chain.
+    Takes a ``PlatformContext`` — unconstructable without a recorded reason —
+    runs on the ``eip_platform`` role, and audits into the target tenant's own
+    chain.
     """
-
-    def __init__(self, data_plane: TenantDataPlane) -> None:
-        self._data_plane = data_plane
-
-    async def create_tenant(
-        self,
-        session: AsyncSession,
-        context: PlatformContext,
-        *,
-        slug: str,
-        name: str,
-    ) -> TenantSummary:
-        """Create a tenant and provision its analytical namespace.
-
-        Ordering matters: the tenant row and its audit event commit in one
-        transaction, and data-plane provisioning happens after that commit
-        because ``CREATE SCHEMA`` is DDL that cannot participate in the same
-        rollback semantics. Provisioning is idempotent, so a crash between the
-        two leaves a tenant whose plane can be re-provisioned safely — the
-        failure mode is a retry, not corruption.
-        """
-        existing = (
-            await session.execute(select(Tenant.id).where(Tenant.slug == slug))
-        ).scalar_one_or_none()
-        if existing is not None:
-            raise ConflictError(f"A tenant with slug {slug!r} already exists.")
-
-        tenant_id = uuid.uuid4()
-        tenant_ref = TenantRef(tenant_id=tenant_id, slug=slug)
-        handle = await self._data_plane.handle(tenant_ref)
-
-        tenant = Tenant(
-            id=tenant_id,
-            slug=slug,
-            name=name,
-            status="active",
-            analytical_schema=handle.namespace,
-            analytical_role=handle.role,
-            isolation_mode=self._data_plane.mode.value,
-        )
-        session.add(tenant)
-
-        try:
-            await session.flush()
-        except IntegrityError as exc:  # pragma: no cover - race with the check above
-            raise ConflictError(f"A tenant with slug {slug!r} already exists.") from exc
-
-        await audit.record_platform_action(
-            session,
-            context,
-            tenant_id=tenant_id,
-            action=audit.AuditAction.TENANT_PROVISIONED,
-            resource_type="tenant",
-            resource_id=str(tenant_id),
-            detail={"slug": slug, "isolation_mode": self._data_plane.mode.value},
-        )
-
-        _log.info("tenant.created", tenant_id=str(tenant_id), slug=slug)
-        return TenantSummary(
-            id=tenant.id,
-            slug=tenant.slug,
-            name=tenant.name,
-            status=tenant.status,
-            isolation_mode=tenant.isolation_mode,
-        )
-
-    async def provision_data_plane(self, session: AsyncSession, tenant: TenantSummary) -> None:
-        """Create the tenant's analytical storage and record its credential.
-
-        Provisioning generates the tenant's database password and stores it in
-        the ``SecretStore``; what lands on the tenant row is the *reference*
-        returned here — a logical name and a version, never a value (ADR-015).
-        Without persisting it, the credential would exist but be unreachable.
-        """
-        handle = await self._data_plane.provision(TenantRef(tenant_id=tenant.id, slug=tenant.slug))
-        if handle.secret_ref is not None:
-            await session.execute(
-                update(Tenant)
-                .where(Tenant.id == tenant.id)
-                .values(
-                    analytical_role=handle.role,
-                    analytical_secret_name=handle.secret_ref.logical_name,
-                    analytical_secret_version=handle.secret_ref.version,
-                )
-            )
 
     async def add_membership(
         self,

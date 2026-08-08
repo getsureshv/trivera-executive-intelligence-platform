@@ -131,40 +131,6 @@
         "title": "CreateTenantRequest",
         "type": "object"
       },
-      "CreateTenantResponse": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "isolation_mode": {
-            "title": "Isolation Mode",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "slug",
-          "name",
-          "status",
-          "isolation_mode"
-        ],
-        "title": "CreateTenantResponse",
-        "type": "object"
-      },
       "DevTokenRequest": {
         "additionalProperties": false,
         "properties": {
@@ -314,7 +280,7 @@
             "type": "string"
           },
           "tenant": {
-            "$ref": "#/components/schemas/TenantResponse"
+            "$ref": "#/components/schemas/eip__api__routers__tenancy__TenantResponse"
           }
         },
         "required": [
@@ -432,40 +398,6 @@
         "title": "RoleCode",
         "type": "string"
       },
-      "TenantResponse": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "title": "Id",
-            "type": "string"
-          },
-          "isolation_mode": {
-            "title": "Isolation Mode",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "slug",
-          "name",
-          "status",
-          "isolation_mode"
-        ],
-        "title": "TenantResponse",
-        "type": "object"
-      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -504,6 +436,127 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "eip__api__routers__admin__TenantResponse": {
+        "description": "What an operator is shown about a tenant.\n\nNote the absence: no password, and no secret *reference* either. The\nreference is safe to store (ADR-015), but nothing outside the data plane\nneeds it, and a value that never reaches a response model cannot leak\nthrough one.",
+        "properties": {
+          "analytical_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analytical Role"
+          },
+          "analytical_schema": {
+            "title": "Analytical Schema",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "isolation_mode": {
+            "title": "Isolation Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "provisioned_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provisioned At"
+          },
+          "provisioning_attempts": {
+            "title": "Provisioning Attempts",
+            "type": "integer"
+          },
+          "provisioning_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provisioning Error"
+          },
+          "provisioning_state": {
+            "title": "Provisioning State",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "isolation_mode",
+          "analytical_schema",
+          "analytical_role",
+          "provisioning_state",
+          "provisioning_attempts",
+          "provisioning_error",
+          "provisioned_at"
+        ],
+        "title": "TenantResponse",
+        "type": "object"
+      },
+      "eip__api__routers__tenancy__TenantResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "isolation_mode": {
+            "title": "Isolation Mode",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "status",
+          "isolation_mode"
+        ],
+        "title": "TenantResponse",
         "type": "object"
       }
     }
@@ -637,8 +690,76 @@
       }
     },
     "/v1/admin/tenants": {
+      "get": {
+        "description": "Every tenant, incomplete ones first.\n\nThis endpoint is what makes \"failed tenants are visibly recoverable\" a\nproperty rather than a claim. Without it, a half-built tenant is\ndiscoverable only by someone querying the database directly.",
+        "operationId": "list_tenants_v1_admin_tenants_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-elevation-reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Elevation-Reason"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/eip__api__routers__admin__TenantResponse"
+                  },
+                  "title": "Response List Tenants V1 Admin Tenants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List tenants and their provisioning state (platform staff only)",
+        "tags": [
+          "platform-admin"
+        ]
+      },
       "post": {
-        "description": "Create a tenant and provision its analytical namespace.\n\nPhase 1A deliberately keeps this a manual, audited, platform-staff\noperation rather than self-serve. Per the Phase 0 review's answer to Q3,\nthe isolation that would be irreversible if skipped is built now;\nprovisioning *automation* waits until there is a second tenant to justify\nit.",
+        "description": "Create a tenant and build its analytical plane.\n\n**Operator-driven, not self-serve.** Reaching this route requires the\n``platform_admin`` capability and an elevation reason, and every call is\naudited into the new tenant's own chain. PO-003 raised provisioning's\npriority — TriVera is tenant #1, not a special case — but it did not ask\nfor public signup, and this is not where one would be added.\n\nSafe to repeat. An interrupted create is resumed; a completed one is\nrefused with 409 rather than silently rebuilding a live tenant's storage.",
         "operationId": "create_tenant_v1_admin_tenants_post",
         "parameters": [
           {
@@ -689,7 +810,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CreateTenantResponse"
+                  "$ref": "#/components/schemas/eip__api__routers__admin__TenantResponse"
                 }
               }
             },
@@ -706,7 +827,83 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Provision a tenant (platform staff only)",
+        "summary": "Register and provision a tenant (platform staff only)",
+        "tags": [
+          "platform-admin"
+        ]
+      }
+    },
+    "/v1/admin/tenants/{tenant_id}/provision": {
+      "post": {
+        "description": "Resume a tenant whose provisioning did not finish.\n\nThe recovery path for exactly the case Phase 1A had no answer to. Returns\nan already-ready tenant unchanged, and 409s if another attempt currently\nholds the claim.",
+        "operationId": "provision_tenant_v1_admin_tenants__tenant_id__provision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tenant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Tenant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-elevation-reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Elevation-Reason"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/eip__api__routers__admin__TenantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry provisioning for a tenant (platform staff only)",
         "tags": [
           "platform-admin"
         ]
@@ -958,7 +1155,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TenantResponse"
+                  "$ref": "#/components/schemas/eip__api__routers__tenancy__TenantResponse"
                 }
               }
             },

@@ -17,12 +17,20 @@ Three conditions gate every route:
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from eip.api.deps import DataPlaneDep, PlatformContextDep, PlatformSession
-from eip.identity.service import TenantProvisioningService
+from eip.api.deps import (
+    DataPlaneDep,
+    PlatformContextDep,
+    PlatformFactoryDep,
+    PlatformSession,
+    SettingsDep,
+)
+from eip.identity.provisioning import TenantProvisioningWorkflow, TenantRecord
+from eip.identity.service import PlatformAdminService
 from eip.platform.context import RoleCode
 from eip.platform.logging import get_logger
 
@@ -38,7 +46,15 @@ class CreateTenantRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
 
 
-class CreateTenantResponse(BaseModel):
+class TenantResponse(BaseModel):
+    """What an operator is shown about a tenant.
+
+    Note the absence: no password, and no secret *reference* either. The
+    reference is safe to store (ADR-015), but nothing outside the data plane
+    needs it, and a value that never reaches a response model cannot leak
+    through one.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     id: uuid.UUID
@@ -46,6 +62,31 @@ class CreateTenantResponse(BaseModel):
     name: str
     status: str
     isolation_mode: str
+    analytical_schema: str
+    analytical_role: str | None
+    provisioning_state: str
+    provisioning_attempts: int
+    #: Redacted at the source (`summarise_failure`). Present so the operator
+    #: who has to fix a failed tenant can see what happened without shelling
+    #: into the database.
+    provisioning_error: str | None
+    provisioned_at: datetime | None
+
+    @classmethod
+    def of(cls, record: TenantRecord) -> TenantResponse:
+        return cls(
+            id=record.id,
+            slug=record.slug,
+            name=record.name,
+            status=record.status,
+            isolation_mode=record.isolation_mode,
+            analytical_schema=record.analytical_schema,
+            analytical_role=record.analytical_role,
+            provisioning_state=record.provisioning_state,
+            provisioning_attempts=record.provisioning_attempts,
+            provisioning_error=record.provisioning_error,
+            provisioned_at=record.provisioned_at,
+        )
 
 
 class GrantMembershipRequest(BaseModel):
@@ -62,47 +103,99 @@ class GrantMembershipResponse(BaseModel):
     membership_id: uuid.UUID
 
 
+def _workflow(
+    factory: PlatformFactoryDep, data_plane: DataPlaneDep, settings: SettingsDep
+) -> TenantProvisioningWorkflow:
+    """Build the workflow.
+
+    It takes the session *factory*, not a session: provisioning is three
+    transactions with DDL between them, and the failure record has to survive
+    the transaction that failed. See `eip.identity.provisioning`.
+    """
+    return TenantProvisioningWorkflow(
+        sessions=factory,
+        data_plane=data_plane,
+        stale_after_seconds=settings.provisioning_stale_after_seconds,
+    )
+
+
 @router.post(
     "/tenants",
-    response_model=CreateTenantResponse,
+    response_model=TenantResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Provision a tenant (platform staff only)",
+    summary="Register and provision a tenant (platform staff only)",
 )
 async def create_tenant(
     payload: CreateTenantRequest,
     context: PlatformContextDep,
-    session: PlatformSession,
+    factory: PlatformFactoryDep,
     data_plane: DataPlaneDep,
-) -> CreateTenantResponse:
-    """Create a tenant and provision its analytical namespace.
+    settings: SettingsDep,
+) -> TenantResponse:
+    """Create a tenant and build its analytical plane.
 
-    Phase 1A deliberately keeps this a manual, audited, platform-staff
-    operation rather than self-serve. Per the Phase 0 review's answer to Q3,
-    the isolation that would be irreversible if skipped is built now;
-    provisioning *automation* waits until there is a second tenant to justify
-    it.
+    **Operator-driven, not self-serve.** Reaching this route requires the
+    ``platform_admin`` capability and an elevation reason, and every call is
+    audited into the new tenant's own chain. PO-003 raised provisioning's
+    priority — TriVera is tenant #1, not a special case — but it did not ask
+    for public signup, and this is not where one would be added.
+
+    Safe to repeat. An interrupted create is resumed; a completed one is
+    refused with 409 rather than silently rebuilding a live tenant's storage.
     """
-    service = TenantProvisioningService(data_plane)
-    tenant = await service.create_tenant(session, context, slug=payload.slug, name=payload.name)
-
-    # DDL runs after the control-plane transaction. Provisioning is idempotent,
-    # so a crash between the two leaves a tenant whose plane can simply be
-    # re-provisioned — the failure mode is a retry, not corruption.
-    await service.provision_data_plane(session, tenant)
+    workflow = _workflow(factory, data_plane, settings)
+    record = await workflow.create(context, slug=payload.slug, name=payload.name)
 
     _log.warning(
         "admin.tenant_created",
-        tenant_id=str(tenant.id),
+        tenant_id=str(record.id),
         actor=str(context.principal.user_id),
         reason=context.reason,
     )
-    return CreateTenantResponse(
-        id=tenant.id,
-        slug=tenant.slug,
-        name=tenant.name,
-        status=tenant.status,
-        isolation_mode=tenant.isolation_mode,
-    )
+    return TenantResponse.of(record)
+
+
+@router.post(
+    "/tenants/{tenant_id}/provision",
+    response_model=TenantResponse,
+    summary="Retry provisioning for a tenant (platform staff only)",
+)
+async def provision_tenant(
+    tenant_id: uuid.UUID,
+    context: PlatformContextDep,
+    factory: PlatformFactoryDep,
+    data_plane: DataPlaneDep,
+    settings: SettingsDep,
+) -> TenantResponse:
+    """Resume a tenant whose provisioning did not finish.
+
+    The recovery path for exactly the case Phase 1A had no answer to. Returns
+    an already-ready tenant unchanged, and 409s if another attempt currently
+    holds the claim.
+    """
+    workflow = _workflow(factory, data_plane, settings)
+    return TenantResponse.of(await workflow.provision(context, tenant_id))
+
+
+@router.get(
+    "/tenants",
+    response_model=list[TenantResponse],
+    summary="List tenants and their provisioning state (platform staff only)",
+)
+async def list_tenants(
+    context: PlatformContextDep,
+    factory: PlatformFactoryDep,
+    data_plane: DataPlaneDep,
+    settings: SettingsDep,
+) -> list[TenantResponse]:
+    """Every tenant, incomplete ones first.
+
+    This endpoint is what makes "failed tenants are visibly recoverable" a
+    property rather than a claim. Without it, a half-built tenant is
+    discoverable only by someone querying the database directly.
+    """
+    workflow = _workflow(factory, data_plane, settings)
+    return [TenantResponse.of(record) for record in await workflow.list_tenants(context)]
 
 
 @router.post(
@@ -123,7 +216,7 @@ async def grant_membership(
     permitting it here would let a tenant-scoped principal acquire
     cross-tenant capability.
     """
-    service = TenantProvisioningService(data_plane)
+    service = PlatformAdminService()
     membership_id = await service.add_membership(
         session,
         context,

@@ -26,7 +26,8 @@ from sqlalchemy import select, text
 
 from eip.dataplane.registry import build_credential_provider, build_data_plane
 from eip.identity.models import AppUser, Membership, Tenant
-from eip.identity.service import TenantProvisioningService
+from eip.identity.provisioning import TenantProvisioningWorkflow
+from eip.identity.service import PlatformAdminService
 from eip.platform.context import ActorType, PlatformContext, Principal, RoleCode
 from eip.platform.db import create_engines, create_session_factory, platform_session
 from eip.platform.logging import configure_logging, get_logger, new_trace_id
@@ -88,6 +89,20 @@ async def _upsert_user(session: object, issuer: str, user: SeedUser) -> uuid.UUI
     return record.id
 
 
+async def _tenant_id_for(factory: object, context: PlatformContext, slug: str) -> uuid.UUID | None:
+    """Look up a tenant by slug in its own short transaction."""
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    assert isinstance(factory, async_sessionmaker)
+    sessions: async_sessionmaker[AsyncSession] = factory
+
+    async with platform_session(sessions, context) as session:
+        found: uuid.UUID | None = (
+            await session.execute(select(Tenant.id).where(Tenant.slug == slug))
+        ).scalar_one_or_none()
+        return found
+
+
 async def seed() -> None:
     settings = get_settings()
     configure_logging(settings)
@@ -103,7 +118,8 @@ async def seed() -> None:
     platform_factory = create_session_factory(engines.platform)
     credentials = build_credential_provider(settings, build_secret_store(settings))
     data_plane = build_data_plane(settings, engines.platform, credentials)
-    service = TenantProvisioningService(data_plane)
+    service = PlatformAdminService()
+    workflow = TenantProvisioningWorkflow(sessions=platform_factory, data_plane=data_plane)
 
     trace_id = new_trace_id()
     admin_principal = Principal(
@@ -120,6 +136,7 @@ async def seed() -> None:
     )
 
     created: list[tuple[str, str, str]] = []
+    tenant_ids: dict[str, uuid.UUID | None] = {}
 
     try:
         async with platform_session(platform_factory, context) as session:
@@ -138,18 +155,21 @@ async def seed() -> None:
                 request_id=trace_id,
             )
 
-            for slug, name, member in TENANTS:
-                already = (
-                    await session.execute(select(Tenant.id).where(Tenant.slug == slug))
-                ).scalar_one_or_none()
-                if already is not None:
-                    _log.info("seed.tenant_exists", slug=slug)
-                    tenant_id = already
-                else:
-                    tenant = await service.create_tenant(session, context, slug=slug, name=name)
-                    await service.provision_data_plane(session, tenant)
-                    tenant_id = tenant.id
+        # Provisioning runs in the workflow's OWN transactions and therefore
+        # cannot happen inside the one above: its claim would block on the row
+        # that transaction holds. So tenants are built between the two blocks.
+        for slug, name, _member in TENANTS:
+            existing = await _tenant_id_for(platform_factory, context, slug)
+            if existing is not None:
+                _log.info("seed.tenant_exists", slug=slug)
+                tenant_ids[slug] = existing
+            else:
+                tenant_ids[slug] = (await workflow.create(context, slug=slug, name=name)).id
 
+        async with platform_session(platform_factory, context) as session:
+            for slug, _name, member in TENANTS:
+                tenant_id = tenant_ids[slug]
+                assert tenant_id is not None
                 member_id = await _upsert_user(session, settings.auth_issuer, member)
 
                 has_membership = (

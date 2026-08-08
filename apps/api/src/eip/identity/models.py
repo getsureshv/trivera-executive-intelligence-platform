@@ -32,6 +32,7 @@ from sqlalchemy import (
     UniqueConstraint,
     false,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -82,6 +83,38 @@ class Tenant(Base):
     analytical_secret_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     analytical_secret_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
+    # --- provisioning lifecycle (migration 0004) --------------------------
+    #
+    # Separate from ``status`` on purpose. ``status`` is what the business
+    # thinks of the tenant — active, suspended, offboarding. This is what the
+    # machinery knows about it, and the two answer different questions: a
+    # tenant can be `active` and have a data plane that failed to build.
+    #
+    # Recorded in the database rather than inferred, because a tenant whose
+    # provisioning died halfway must be *visible* as such. Inferring "ready"
+    # from "the columns are populated" is how a half-created tenant becomes a
+    # support ticket six weeks later.
+
+    #: pending → in_progress → ready, or → failed. See ``eip.identity.provisioning``.
+    provisioning_state: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    #: Incremented by each claim, so a tenant that keeps failing is obvious.
+    provisioning_attempts: Mapped[int] = mapped_column(
+        nullable=False, default=0, server_default=text("0")
+    )
+    #: When the current (or last) attempt claimed the row. Also the staleness
+    #: clock: an attempt whose process died leaves ``in_progress`` behind, and
+    #: without a timestamp that state would block retries forever.
+    provisioning_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    provisioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Why the last attempt failed, **redacted**. Driver errors quote the
+    #: failing statement, and the statement that creates a tenant role contains
+    #: its password — see ``summarise_failure``.
+    provisioning_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -92,8 +125,23 @@ class Tenant(Base):
     memberships: Mapped[list[Membership]] = relationship(back_populates="tenant")
 
     __table_args__ = (
-        CheckConstraint("status IN ('active','suspended','offboarding')", name="ck_tenant_status"),
+        CheckConstraint(
+            "status IN ('provisioning','active','suspended','offboarding')",
+            name="ck_tenant_status",
+        ),
         CheckConstraint("slug ~ '^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$'", name="ck_tenant_slug_format"),
+        CheckConstraint(
+            "provisioning_state IN ('pending','in_progress','ready','failed')",
+            name="ck_tenant_provisioning_state",
+        ),
+        # The operator console's only query: "what is stuck?". Partial, because
+        # ready tenants are the overwhelming majority and are never the answer.
+        Index(
+            "ix_tenant_provisioning_incomplete",
+            "provisioning_state",
+            "provisioning_started_at",
+            postgresql_where=text("provisioning_state <> 'ready'"),
+        ),
     )
 
 

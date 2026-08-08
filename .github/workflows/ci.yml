@@ -146,6 +146,10 @@ jobs:
         working-directory: apps/api
         run: pytest tests/security/test_analytical_credentials.py -v
 
+      - name: 'SECURITY: operator-driven tenant provisioning'
+        working-directory: apps/api
+        run: pytest tests/security/test_tenant_provisioning.py -v
+
       - name: 'SECURITY: audit tamper evidence'
         working-directory: apps/api
         run: pytest tests/security/test_audit_tamper_evidence.py -v
