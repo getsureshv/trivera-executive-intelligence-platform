@@ -1,8 +1,9 @@
 # 19 — Phase 1A Completion Report (Platform Skeleton)
 
 Date: 2026-08-07
-Status: **Remediated.** Supersedes the first version of this report, which
-overstated four guarantees — see *Corrections* below.
+Status: **CLOSED — PASS.** See *Phase 1A closure* at the end.
+Supersedes the first version of this report, which overstated four
+guarantees — see *Corrections* below.
 Commits: `d766783` (initial), `450aab5` (remediation), `c12ef30` (CI fixes),
 `b7b5d35` (G10 — per-tenant analytical credentials)
 CI: [run 31233689164](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31233689164)
@@ -78,19 +79,21 @@ constructs the database does not enforce.
 This was also a **deviation from ADR-003 §2**, which already required `USAGE`
 on "only the current tenant's schema".
 
-**Now:**
+**The F1 fix, as shipped in `450aab5`** — described here for the record, and
+**since superseded**; see G10 below for the current design:
 
-- `eip_app` is **`NOINHERIT`** and holds **no privilege** on any tenant schema.
-- Each tenant gets a `NOLOGIN`, passwordless role `eip_t_<uuid>` with `USAGE` on
+- `eip_app` was made `NOINHERIT` and held no privilege on any tenant schema.
+- Each tenant got a `NOLOGIN`, passwordless role `eip_t_<uuid>` with `USAGE` on
   exactly one schema.
-- `eip_app` is a *member* of each, which grants only the ability to `SET ROLE` —
-  not the privileges, because of `NOINHERIT`.
-- `analytical_session()` issues `SET LOCAL ROLE`, transaction-scoped, and is the
-  only place in the codebase that does (enforced by an architecture test).
-- Startup refuses to boot if `eip_app` is `INHERIT`.
+- `eip_app` was a *member* of each, which granted only the ability to `SET ROLE`
+  — not the privileges, because of `NOINHERIT`.
+- `analytical_session()` issued `SET LOCAL ROLE`, transaction-scoped, and was
+  the only place in the codebase that did.
+- Startup refused to boot if `eip_app` was `INHERIT`.
 
-After the role switch, a statement naming another tenant's schema is refused by
-PostgreSQL with `permission denied` — regardless of how the SQL was built.
+After the role switch a statement naming another tenant's schema was refused by
+PostgreSQL with `permission denied`, regardless of how the SQL was built — so
+this closed F1. What it did not close was *who decided which role to assume*.
 
 **Superseded by the G10 fix (commit `b7b5d35`).** The design above left a
 residual: `eip_app` was a member of every tenant role, so code that
@@ -382,11 +385,10 @@ script that has its own 10-case test, run in CI before the check itself.
 | # | Gap | Severity | Owner phase |
 | --- | --- | --- | --- |
 | G3 | **No end-to-end browser test.** `tests/e2e` from ADR-001 does not exist; the acceptance flow is driven by `curl` and by the stack-smoke job. | Medium | 1B |
-| G4 | **`SecretStore` is a port with no adapter.** Types and interface only — Phase 1A stores no secrets. | Low — by design | 2 |
 | G5 | **OpenTelemetry is wired but never exercised.** Disabled by default; no collector has received a span. | Low | 1B |
 | G7 | **Dramatiq is a connectivity check only.** No actors, queues, or per-tenant fairness caps. | Low — by design | 2 |
 | G9 | Compose health checks use `urllib`, so they exercise HTTP but not the dependency graph `/ready` does. | Informational | — |
-| G14 | **No production `SecretStore` adapter.** `FileSecretStore` is local/ci/dev only; production-like startup fails closed rather than falling back. | Medium | 2 |
+| G14 | **No production `SecretStore` adapter.** `FileSecretStore` (local/ci/dev) and `InMemorySecretStore` (tests) exist and are exercised by the G10 suite; only a cloud adapter is outstanding. `build_secret_store` fails closed in production-like environments rather than falling back to plaintext on disk, so this is a blocked deployment rather than a silent weakness. | Medium | 2 |
 | G11 | **Audit checkpoints are not exported off-box.** A database owner can rewrite them undetected; see F4 boundary. | Medium | 1B/2 |
 | G12 | **Frontend tests cover the error type only.** 7 tests, no component or route coverage. | Medium | 1B |
 | G13 | **The OIDC adapter has never run against a real IdP.** Verified against in-process RSA keys and a local JWKS server; discovery is untested against a live provider. | Medium | 1B |
@@ -410,26 +412,34 @@ analytical credential — closed by commit `b7b5d35`) are **closed**.
 
 ---
 
-## Product-owner items still open
+## Product-owner decisions
 
-**PO-001 … PO-005 do not exist in this repository** (verified by `git ls-files`
-and a repo-wide grep). Phase 1A and this remediation proceeded under
-ADR-003/009/010/014/015 as the governing authority.
+**PO-001 … PO-005 are now recorded** in
+[`20_PRODUCT_OWNER_DECISIONS.md`](20_PRODUCT_OWNER_DECISIONS.md), closing Q1–Q4
+from the Phase 0 review and confirming the tenant data-plane model. Phase 1A was
+built under ADR-003/009/010/014/015 as the governing authority; PO-005 confirms
+that was the right assumption.
 
-Still needed:
+| Decision | Effect on Phase 1A |
+| --- | --- |
+| PO-001 — no bring-your-own warehouse in V1 | Confirms ADR-007 §7 and ADR-008; no change |
+| PO-002 — outbound connections + IP allowlisting | Binds Phase 2; ADR-004's streaming contract is the agent extension point |
+| PO-003 — multi-tenant SaaS from day one; TriVera is tenant #1 | **Raises the priority of provisioning automation**, which Phase 1A deliberately left manual |
+| PO-004 — restatements never overwrite history | Binds Phase 6+; adds reason and approval to observation provenance, which ADR-012 did not mandate |
+| PO-005 — confirm the ADR-003 hybrid model | **Confirms what Phase 1A built and verified.** No change required |
 
-- **PO-005 / tenant data plane** — confirm schema-per-tenant. If a different
-  mode was chosen, the `TenantDataPlane` port absorbs it but the implementation
-  would be replaced.
-- **Q1–Q4 from the Phase 0 review** remain the gate on wider Phase 1 work:
-  bring-your-own warehouse, private-network connectivity, SaaS-now vs.
-  TriVera-first, and restatement policy.
+Two consequences are owed to later phases, recorded here so they are not
+discovered late: provisioning automation moves into Phase 1B/2 scope under
+PO-003, and an ADR-012 amendment is owed under PO-004.
+
+Questions **Q5–Q12** remain open. None gates Phase 1B.
 
 ---
 
 ## Recommendation
 
-**PASS, conditional.** Phase 1A is complete and its guarantees are now
+**PASS.** (Recorded as conditional when written; the conditions are now met —
+see *Phase 1A closure*.) Phase 1A is complete and its guarantees are now
 evidenced rather than asserted. Every blocking finding is fixed with a test that
 would catch its regression, CI is green end to end, and the boundaries of each
 guarantee are documented — including the two places where the guarantee stops
@@ -452,3 +462,76 @@ where they were true instead of attacking them where they might not be.** The
 suites added here are written the other way round — every one of them tries to
 break the guarantee it documents, and several exist purely to prove the others
 are not passing vacuously.
+
+---
+
+## Phase 1A closure
+
+**Phase 1A is formally closed. Final verdict: PASS.**
+
+### Commits
+
+| Commit | What |
+| --- | --- |
+| `d766783` | Platform skeleton with enforced tenant isolation |
+| `560dcbb` | First completion report (later corrected) |
+| `450aab5` | Remediation of four blocking security findings |
+| `c12ef30` | CI fixes — pnpm setup, Alembic hook, model drift |
+| `7883f28` | Corrected report |
+| `b7b5d35` | **G10 — per-tenant analytical credentials** |
+| `1f3ed8e` | Report updated for G10 closure |
+
+### Verification
+
+[CI run 31233689164](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31233689164)
+— **success, all 5 jobs.**
+
+**232 tests pass**: 199 API, 16 worker, 7 web, 10 shell-script cases.
+`ruff format` and `ruff check` clean; `mypy --strict` clean on 43 modules;
+migrations upgrade, downgrade, and re-upgrade with an empty autogenerate diff.
+
+### Accepted residual gaps
+
+Carried into later phases with the product owner's acceptance, not as oversights:
+
+| # | Gap | Why acceptable now |
+| --- | --- | --- |
+| G11 | Audit checkpoints are not exported off-box | Tampering by any *application or platform* role is detectable; only a database owner can evade it. The boundary is documented and has its own test |
+| G14 | No production `SecretStore` adapter | Startup fails closed in production-like environments, so this blocks a deployment rather than weakening one |
+| G13 | OIDC adapter unproven against a real IdP | Verified against in-process keys and a local JWKS server; discovery is the untested part |
+| G3, G12 | No end-to-end browser test; frontend tests cover the error type only | The security-critical surface is the API, which is covered; the web tier holds no credentials and no database access |
+| G5, G7, G9 | OpenTelemetry unexercised; Dramatiq is a connectivity check; compose health checks are shallow | Deliberately unbuilt — there is nothing yet to trace, queue, or deeply health-check |
+
+Nothing on this list weakens tenant isolation, authentication, or audit
+integrity. Each is either a deferred capability or a documented boundary.
+
+### Phase 1B entry conditions
+
+Phase 1B may begin. These are entry tasks, not blockers:
+
+1. **Provisioning automation** — PO-003 makes TriVera an ordinary tenant, so
+   manual platform-staff provisioning is no longer proportionate.
+2. **G13** — exercise the OIDC adapter against a real identity provider.
+   Discovery, clock skew, and claim-shape surprises live there.
+3. **G3 / G12** — establish the end-to-end browser test and extend frontend
+   coverage beyond the error type.
+4. **Cache discipline** — ADR-007 §4 requires `auth_scope_hash` in every cache
+   key. No cache exists yet, so the highest-severity defect found in the Phase 0
+   review is currently *impossible*; it must be prevented the moment caching is
+   introduced.
+5. **ADR-012 amendment** — add reason and approval to observation provenance
+   under PO-004, before the metric layer is built.
+
+### What Phase 1A established
+
+The platform foundation, and nothing else: no connectors, semantic model,
+metrics, dashboards, lineage, insights, or AI. What it does establish is the set
+of guarantees every later phase will rest on — tenant isolation on both planes,
+enforced by PostgreSQL rather than by application discipline; delegated
+authentication that cannot fall back; a worker with no privileged credential;
+and an audit trail whose tamper-evidence has a tested boundary.
+
+The correction history is part of the record deliberately. Four guarantees were
+claimed before they were true, and a fifth (G10) was true but depended on an
+application choice. Each was found by attacking the claim rather than confirming
+it, which is the standard the remaining phases inherit.

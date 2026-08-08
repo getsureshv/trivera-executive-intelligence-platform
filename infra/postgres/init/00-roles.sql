@@ -11,18 +11,20 @@
 --                 Owns the SECURITY DEFINER functions, so those functions can
 --                 write objects that no runtime role may write directly.
 --
---  eip_app        The application runtime role. ONE login credential shared by
---                 the API and the worker.
---                 NOSUPERUSER, NOBYPASSRLS, not a table owner — so Row-Level
---                 Security genuinely applies on the control plane.
+--  eip_app        The CONTROL-PLANE runtime role, shared by the API and the
+--                 worker. NOSUPERUSER, NOBYPASSRLS, not a table owner — so
+--                 Row-Level Security genuinely applies.
 --
---                 **NOINHERIT is load-bearing, not stylistic.**
---                 eip_app is made a member of every per-tenant analytical role
---                 so it can `SET LOCAL ROLE` into exactly one of them. With
---                 INHERIT (the PostgreSQL default) it would silently acquire
---                 the *union* of every tenant's privileges, which is precisely
---                 the hole this design exists to close. The API and worker
---                 assert NOINHERIT at startup and refuse to boot otherwise.
+--                 **It holds no privilege on any tenant analytical schema and
+--                 is a member of no tenant role.** Analytical data is reached
+--                 with each tenant's own credential, never by this one. The API
+--                 and worker assert both properties at startup and refuse to
+--                 boot otherwise.
+--
+--                 NOINHERIT is retained as hygiene rather than as the
+--                 mechanism: with no memberships there is nothing to inherit,
+--                 but a mistakenly granted membership would then still confer
+--                 no privileges.
 --
 --  eip_platform   The EXPLICIT privileged path. BYPASSRLS.
 --                 Used only by audited platform-admin operations such as
@@ -32,30 +34,38 @@
 --                 CREATEROLE so it can provision per-tenant analytical roles.
 --                 **The worker does NOT hold this credential** (see below).
 --
---  eip_t_<uuid>   One NOLOGIN role per provisioned tenant, created at
---                 provisioning time. Granted USAGE on exactly one schema —
---                 its own. Has no password and cannot log in; it is reachable
---                 only via `SET LOCAL ROLE` from eip_app.
+--  eip_t_<uuid>   One LOGIN role per provisioned tenant, created at
+--                 provisioning time with its own generated password held in
+--                 the SecretStore. Granted USAGE on exactly one schema — its
+--                 own — and a member of nothing.
+--
+--                 Connections authenticate *as* this role. Nothing assumes it,
+--                 and it can assume nothing, so a statement naming another
+--                 tenant's schema is refused because the connection is not
+--                 that tenant and has no means of becoming it.
 --
 -- ===========================================================================
 --  CONNECTION ROUTING
 -- ===========================================================================
 --
---  Control plane   eip_app  →  public schema, RLS scoped by app.tenant_id
---                             (SET LOCAL, transaction-scoped)
+--  Control plane   eip_app       →  public schema, RLS scoped by app.tenant_id
+--                                  (SET LOCAL, transaction-scoped). One pool.
 --
---  Analytical      eip_app  →  SET LOCAL ROLE eip_t_<uuid>
---                             After this, current_user is the tenant role and
---                             PostgreSQL denies any reference to another
---                             tenant's schema — regardless of what SQL is
---                             issued, because the privilege simply is not held.
+--  Analytical      eip_t_<uuid>  →  its OWN pool, authenticated with its OWN
+--                                  password. Nothing is assumed and nothing is
+--                                  switched: the connection can only ever be
+--                                  one tenant. Pools are bounded per tenant
+--                                  with LRU and idle eviction, because
+--                                  max_connections is a hard cluster limit.
 --
---  Privileged      eip_platform  →  separate engine, API process only
+--  Privileged      eip_platform  →  separate engine, API process only. The
+--                                  worker never holds this credential.
 --
---  Both roles use one connection pool each. There is no per-tenant connection
---  pool and no per-tenant password, so there is no per-tenant secret to store
---  or rotate. `SET LOCAL ROLE` is transaction-scoped, so a pooled connection
---  cannot carry a tenant role into the next checkout.
+--  `SET ROLE` appears nowhere in the codebase; an architecture test asserts it.
+--  An earlier design had eip_app assume a per-tenant role, which PostgreSQL
+--  enforced only *after* the switch — leaving which tenant was reached an
+--  application decision. That was Phase 1A finding G10, and it is closed
+--  (see docs/19_PHASE_1A_REPORT.md).
 --
 -- Passwords here are local-development placeholders. Real deployments obtain
 -- credentials from the secret manager through the SecretStore port; nothing
@@ -65,8 +75,8 @@
 CREATE ROLE eip_migrator LOGIN PASSWORD 'local_dev_only'
     NOSUPERUSER NOBYPASSRLS NOINHERIT;
 
--- NOINHERIT: see the note above. Removing it silently defeats analytical
--- isolation, so tests/security/test_analytical_isolation.py asserts it.
+-- NOINHERIT: see the note above. Asserted at startup and by
+-- tests/security/test_analytical_credentials.py.
 CREATE ROLE eip_app LOGIN PASSWORD 'local_dev_only'
     NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
 
@@ -118,7 +128,8 @@ ALTER DEFAULT PRIVILEGES FOR ROLE eip_migrator IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE eip_migrator IN SCHEMA public
     GRANT USAGE, SELECT ON SEQUENCES TO eip_app, eip_platform;
 
--- eip_platform creates the per-tenant analytical schemas and roles.
+-- eip_platform creates the per-tenant analytical schemas and login roles,
+-- and generates their passwords into the SecretStore.
 GRANT CREATE ON DATABASE eip TO eip_platform;
 
 -- pg_stat_statements backs per-tenant query cost attribution (ADR-014 §7).

@@ -6,8 +6,13 @@ the index referenced by `CLAUDE.md` and `AGENTS.md`; start here.
 ## Authority order
 
 ```
-accepted ADRs  >  this documentation set  >  OpenAI Work artifacts  >  research
+product-owner decisions  >  accepted ADRs  >  this documentation set
+                         >  OpenAI Work artifacts  >  research
 ```
+
+Product-owner decisions ([`20`](20_PRODUCT_OWNER_DECISIONS.md)) define what the
+business has committed to; the ADRs serve them. Where the two appear to
+disagree, the ADR is amended or superseded — never reinterpreted.
 
 Where a Phase 0 ADR and a numbered document disagree, **the ADR governs**. Affected
 documents carry a `> **Phase 0 update**` callout pointing at the ADR. Changing an accepted
@@ -42,6 +47,7 @@ decision means writing a new ADR, not editing the old one
 
 | # | Document | What it covers |
 | --- | --- | --- |
+| 20 | [Product-Owner Decisions](20_PRODUCT_OWNER_DECISIONS.md) | PO-001 … PO-005 — the business commitments the ADRs serve. **Outrank accepted ADRs**; closes Phase 0 questions Q1–Q4 |
 | 19 | [Phase 1A Report](19_PHASE_1A_REPORT.md) | Completion report for the platform skeleton, **as remediated**: the four security findings and their fixes, the role and credential model, tests with observed results, migration/rollback evidence, the green CI run, and remaining gaps |
 | — | [Architecture Decision Records](adr/README.md) | ADR-001 … ADR-015 — the binding decisions |
 
