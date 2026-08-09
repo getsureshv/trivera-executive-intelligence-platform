@@ -44,6 +44,7 @@ prove this, rather than only observing that RLS filtered a tenant session.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -122,6 +123,7 @@ async def relay_tenant_batch(
     tenant_id: uuid.UUID,
     *,
     batch_size: int,
+    dispatch: Callable[[PublishedMessage], None] | None = None,
 ) -> list[PublishedMessage]:
     """Claim and publish one batch for a single tenant.
 
@@ -160,9 +162,8 @@ async def relay_tenant_batch(
                     topic=str(row.topic),
                     payload=dict(row.payload or {}),
                 )
-                # Phase 1A has no real consumers. Dispatch is a logged no-op so
-                # the durable path is exercised and observable end to end;
-                # Phase 2 replaces this with a Dramatiq send.
+                if dispatch is not None:
+                    dispatch(message)
                 _log.info("outbox.published", topic=message.topic, message_id=str(message.id))
 
                 await session.execute(
@@ -190,10 +191,13 @@ async def relay_once(
     app_factory: async_sessionmaker[AsyncSession],
     *,
     batch_size: int,
+    dispatch: Callable[[PublishedMessage], None] | None = None,
 ) -> int:
     """Run one full relay pass across all tenants with pending work."""
     total = 0
     for tenant_id in await pending_tenants(app_factory):
-        published = await relay_tenant_batch(app_factory, tenant_id, batch_size=batch_size)
+        published = await relay_tenant_batch(
+            app_factory, tenant_id, batch_size=batch_size, dispatch=dispatch
+        )
         total += len(published)
     return total

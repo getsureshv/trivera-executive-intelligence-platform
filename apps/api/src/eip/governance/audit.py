@@ -81,6 +81,10 @@ class AuditAction:
     SOURCE_UPDATED = "source.updated"
     SOURCE_CREDENTIAL_ROTATED = "source.credential_rotated"
     SOURCE_ACCESS_DENIED = "source.access.denied"
+    CONNECTION_TEST_REQUESTED = "connection_test.requested"
+    CONNECTION_TEST_COMPLETED = "connection_test.completed"
+    CONNECTION_TEST_FAILED = "connection_test.failed"
+    CONNECTION_TEST_DENIED = "connection_test.denied"
 
     # background processing (ADR-009)
     OUTBOX_RELAYED = "outbox.relayed"

@@ -204,6 +204,9 @@ services:
       EIP_SERVICE_NAME: eip-worker
       EIP_DB_APP_DSN: postgresql+asyncpg://eip_app:local_dev_only@postgres:5432/eip
       EIP_SECRET_STORE_PATH: /var/lib/eip/secrets
+      # Controlled exception for explicitly allowlisted source addresses. Empty
+      # by default; real connection tests set a narrow CIDR for their source.
+      EIP_CONNECTOR_EGRESS_ALLOWLIST: '${EIP_CONNECTOR_EGRESS_ALLOWLIST:-}'
       # NOTE: EIP_DB_PLATFORM_DSN is deliberately NOT supplied to the worker.
       # An ordinary worker must not hold a reusable BYPASSRLS credential
       # (ADR-009; Phase 1A finding 3). It reaches cross-tenant information only

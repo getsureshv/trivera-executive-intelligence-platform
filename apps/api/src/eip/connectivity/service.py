@@ -228,6 +228,10 @@ class DataSourceService:
             return row
         row.version += 1
         await session.flush()
+        # SQLAlchemy expires server-generated on-update columns after flush.
+        # Refresh before the router serializes the row; implicit async IO from
+        # Pydantic attribute access would otherwise raise MissingGreenlet.
+        await session.refresh(row, attribute_names=["updated_at"])
         return row
 
     async def grant(

@@ -40,8 +40,13 @@ from eip.platform.db import (
 from eip.platform.logging import configure_logging, get_logger
 from eip.platform.settings import Settings, get_settings
 from eip.platform.telemetry import configure_telemetry
-from eip_worker.broker import check_broker
-from eip_worker.outbox import relay_once
+from eip_worker.broker import (
+    check_broker,
+    enqueue_connection_test,
+    start_interactive_consumer,
+    stop_interactive_consumer,
+)
+from eip_worker.outbox import PublishedMessage, relay_once
 
 _log = get_logger("worker.main")
 
@@ -61,6 +66,7 @@ class Worker:
         self._stopping = asyncio.Event()
         self._db_ready = False
         self._broker_ready = False
+        self._interactive_consumer: object | None = None
 
     @property
     def ready(self) -> bool:
@@ -82,6 +88,8 @@ class Worker:
             # Not fatal: the outbox is durable, so work accumulates safely in
             # PostgreSQL until the broker returns. Readiness reflects it.
             _log.warning("worker.broker_unavailable", url_scheme=self._settings.redis_url[:8])
+        else:
+            self._interactive_consumer = start_interactive_consumer(self._settings)
 
         _log.info("worker.invariants_verified", broker_ready=self._broker_ready)
 
@@ -92,7 +100,12 @@ class Worker:
 
         while not self._stopping.is_set():
             try:
-                published = await relay_once(self._app_factory, batch_size=batch)
+
+                def dispatch(message: PublishedMessage) -> None:
+                    if message.topic == "connection_test.requested":
+                        enqueue_connection_test(self._settings, message.payload)
+
+                published = await relay_once(self._app_factory, batch_size=batch, dispatch=dispatch)
             except Exception:
                 _log.exception("worker.relay_failed")
                 self._db_ready = False
@@ -108,6 +121,8 @@ class Worker:
         self._stopping.set()
 
     async def close(self) -> None:
+        if self._interactive_consumer is not None:
+            stop_interactive_consumer(self._interactive_consumer)
         await self._engine.dispose()
 
 

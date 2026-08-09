@@ -78,6 +78,7 @@ class Settings(BaseSettings):
 
     # --- broker (ADR-009) -------------------------------------------------
     redis_url: str = "redis://localhost:6379/0"
+    connector_egress_allowlist: str = ""
 
     # --- api --------------------------------------------------------------
     api_host: str = "0.0.0.0"  # noqa: S104 - containers bind all interfaces
@@ -125,6 +126,14 @@ class Settings(BaseSettings):
     worker_health_port: Annotated[int, Field(ge=1, le=65535)] = 8001
     outbox_poll_interval_seconds: Annotated[float, Field(gt=0, le=60)] = 1.0
     outbox_batch_size: Annotated[int, Field(ge=1, le=1000)] = 100
+    connection_test_tenant_concurrency: Annotated[int, Field(ge=1, le=10)] = 2
+    connection_test_lease_seconds: Annotated[float, Field(gt=1, le=3600)] = 60.0
+
+    @property
+    def connector_egress_allowlist_list(self) -> list[str]:
+        return [
+            value.strip() for value in self.connector_egress_allowlist.split(",") if value.strip()
+        ]
 
     @field_validator("data_plane_schema_prefix")
     @classmethod

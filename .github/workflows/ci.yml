@@ -166,6 +166,10 @@ jobs:
         working-directory: apps/api
         run: pytest tests/security/test_audit_and_authorization.py -v
 
+      - name: 'SECURITY: data-source isolation and fenced connection tests'
+        working-directory: apps/api
+        run: pytest tests/security/test_data_source_management.py tests/security/test_connection_test_fencing.py -v
+
       - name: 'SECURITY: worker privileges and background isolation'
         working-directory: apps/worker
         run: pytest -v

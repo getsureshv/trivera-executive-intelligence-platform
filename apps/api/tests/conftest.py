@@ -177,7 +177,16 @@ class Fixtures:
 #: to its audit rows — see migration 0001). The *runtime* role has neither,
 #: which is the guarantee that actually matters and is asserted in
 #: ``tests/security/test_audit_and_authorization.py``.
-_RESET_ORDER = ("audit_event", "outbox", "membership", "tenant", "app_user")
+_RESET_ORDER = (
+    "connection_test",
+    "data_source_acl",
+    "data_source",
+    "audit_event",
+    "outbox",
+    "membership",
+    "tenant",
+    "app_user",
+)
 
 
 async def _reset(engine: AsyncEngine) -> None:

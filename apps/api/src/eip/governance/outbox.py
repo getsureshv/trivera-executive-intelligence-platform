@@ -40,6 +40,9 @@ class Topic:
     TENANT_REGISTERED = "tenant.registered"
     TENANT_PROVISIONED = "tenant.provisioned"
     TENANT_PROVISIONING_FAILED = "tenant.provisioning_failed"
+    CONNECTION_TEST_REQUESTED = "connection_test.requested"
+    CONNECTION_TEST_COMPLETED = "connection_test.completed"
+    CONNECTION_TEST_FAILED = "connection_test.failed"
 
 
 async def publish(
