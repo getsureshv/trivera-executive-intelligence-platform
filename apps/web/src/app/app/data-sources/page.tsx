@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { ApiError, fetchDataSources } from '@/lib/api';
+import { ApiError, fetchDataSources, fetchMe } from '@/lib/api';
 
 import { DataSourceManager } from './DataSourceManager';
 
@@ -8,7 +8,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function DataSourcesPage() {
   try {
-    return <DataSourceManager initialSources={await fetchDataSources()} />;
+    const [sources, me] = await Promise.all([fetchDataSources(), fetchMe()]);
+    return (
+      <DataSourceManager
+        initialSources={sources}
+        canDelete={me.capabilities.includes('source.delete')}
+      />
+    );
   } catch (error) {
     if (error instanceof ApiError && error.isUnauthenticated) redirect('/sign-in');
     if (error instanceof ApiError && error.isForbidden) {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, select, text
@@ -201,6 +202,8 @@ class DataSourceService:
     ) -> DataSource:
         context.require(Capability.SOURCE_UPDATE)
         row = await self.get(session, context, source_id, manage=True)
+        if row.status != "active":
+            raise ConflictError("Disabled data sources cannot be updated.")
         if row.version != expected_version:
             raise PreconditionFailedError("The data source was changed by another request.")
         changed_fields: list[str] = []
@@ -233,6 +236,39 @@ class DataSourceService:
         # Pydantic attribute access would otherwise raise MissingGreenlet.
         await session.refresh(row, attribute_names=["updated_at"])
         return row
+
+    async def disable(
+        self,
+        session: AsyncSession,
+        context: TenantContext,
+        source_id: uuid.UUID,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[DataSource, bool]:
+        """Idempotently disable a source and establish its recovery deadline."""
+        context.require(Capability.SOURCE_DELETE)
+        row = await self.get(session, context, source_id, manage=True)
+        if row.status == "disabled":
+            return row, False
+        disabled_at = now or datetime.now(UTC)
+        if disabled_at.tzinfo is None or disabled_at.utcoffset() is None:
+            raise ValueError("disable timestamp must be timezone-aware")
+        # Locking closes the race with maintenance and concurrent deletion.
+        locked = await session.scalar(
+            select(DataSource).where(DataSource.id == row.id).with_for_update()
+        )
+        if locked is None:
+            raise NotFoundError()
+        row = locked
+        if row.status == "disabled":
+            return row, False
+        row.status = "disabled"
+        row.version += 1
+        row.disabled_at = disabled_at
+        row.credential_destroy_after = disabled_at + timedelta(days=30)
+        await session.flush()
+        await session.refresh(row, attribute_names=["updated_at"])
+        return row, True
 
     async def grant(
         self,

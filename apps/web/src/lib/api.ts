@@ -132,6 +132,12 @@ export function createDataSource(
   });
 }
 
+export function disableDataSource(sourceId: string): Promise<DataSource> {
+  return request<DataSource>(`/v1/data-sources/${encodeURIComponent(sourceId)}`, {
+    method: 'DELETE',
+  });
+}
+
 export function requestConnectionTest(
   sourceId: string,
   idempotencyKey: string,

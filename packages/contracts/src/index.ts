@@ -106,6 +106,9 @@ export interface DataSource {
   credential_configured: true;
   created_at: string;
   updated_at: string;
+  disabled_at: string | null;
+  credential_destroy_after: string | null;
+  credential_destroyed_at: string | null;
 }
 
 export interface CreateDataSourceRequest {

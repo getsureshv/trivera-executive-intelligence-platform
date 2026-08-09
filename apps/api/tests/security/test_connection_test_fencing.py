@@ -187,3 +187,86 @@ async def test_superseded_attempt_cannot_read_old_secret_or_overwrite_new_result
     assert terminal_outbox == [(b_id, "connection_test.completed")]
     assert old_secret_name != new_secret_name
     assert [ref.logical_name for ref in secrets.reads] == [new_secret_name]
+
+
+async def test_deleted_source_fences_paused_attempt_before_secret_or_network(
+    client: AsyncClient,
+    seeded: Fixtures,
+    platform_engine: AsyncEngine,
+    app_sessions: async_sessionmaker[AsyncSession],
+    platform_sessions: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    token = await token_for(client, seeded.user_a.email, seeded.tenant_a.id)
+    created = await client.post(
+        "/v1/data-sources",
+        headers={**auth(token), "Idempotency-Key": str(uuid.uuid4())},
+        json={
+            "name": "Delete fence PostgreSQL",
+            "connector_type": "postgresql",
+            "endpoint": "never-contact.invalid:5432",
+            "configuration": {
+                "username": "reader",
+                "database": "warehouse",
+                "tls_mode": "require",
+            },
+            "credential": "delete-fence-sentinel",
+        },
+    )
+    assert created.status_code == 201
+    source_id = created.json()["id"]
+    requested = await client.post(
+        f"/v1/data-sources/{source_id}/test",
+        headers={**auth(token), "Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert requested.status_code == 202
+    async with platform_sessions() as session:
+        from eip.connectivity.models import ConnectionTest
+
+        row = await session.get(ConnectionTest, uuid.UUID(requested.json()["id"]))
+        assert row is not None
+        payload = _payload(row, seeded.user_a.id)
+
+    app: Any = client._transport.app
+    secrets = RecordingSecretStore(app.state.secret_store)
+    paused, resume = asyncio.Event(), asyncio.Event()
+
+    async def pause() -> None:
+        paused.set()
+        await resume.wait()
+
+    task = asyncio.create_task(
+        execute_connection_test(
+            app_sessions, settings, secrets, payload, before_execution_fence=pause
+        )
+    )
+    await asyncio.wait_for(paused.wait(), timeout=5)
+    deleted = await client.delete(f"/v1/data-sources/{source_id}", headers=auth(token))
+    assert deleted.status_code == 200
+    resume.set()
+    assert await asyncio.wait_for(task, timeout=5) == "stale"
+    assert secrets.reads == []
+
+    async with platform_engine.connect() as connection:
+        state = (
+            await connection.execute(
+                text("SELECT status,overall_code FROM connection_test WHERE id=:id"),
+                {"id": uuid.UUID(requested.json()["id"])},
+            )
+        ).one()
+        terminal_audit = await connection.scalar(
+            text(
+                "SELECT count(*) FROM audit_event WHERE resource_id=:id AND action IN "
+                "('connection_test.completed','connection_test.failed')"
+            ),
+            {"id": requested.json()["id"]},
+        )
+        terminal_outbox = await connection.scalar(
+            text(
+                "SELECT count(*) FROM outbox WHERE payload->>'job_id'=:id AND topic IN "
+                "('connection_test.completed','connection_test.failed')"
+            ),
+            {"id": requested.json()["id"]},
+        )
+    assert tuple(state) == ("stale", None)
+    assert terminal_audit == terminal_outbox == 0

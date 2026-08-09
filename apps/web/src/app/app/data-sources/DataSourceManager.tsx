@@ -4,14 +4,20 @@ import { useRef, useState, useTransition } from 'react';
 
 import type { ConnectionTest, DataSource } from '@eip/contracts';
 
-import { addSource, beginTest, pollTest } from './actions';
+import { addSource, beginTest, disableSource, pollTest } from './actions';
 import { resultSummary } from './presentation';
 
 const POLL_INTERVAL_MS = 1000;
 const MAX_POLLS = 30;
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export function DataSourceManager({ initialSources }: { initialSources: DataSource[] }) {
+export function DataSourceManager({
+  initialSources,
+  canDelete,
+}: {
+  initialSources: DataSource[];
+  canDelete: boolean;
+}) {
   const [sources, setSources] = useState(initialSources);
   const [tests, setTests] = useState<Record<string, ConnectionTest>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -63,6 +69,22 @@ export function DataSourceManager({ initialSources }: { initialSources: DataSour
     });
   }
 
+  function disable(source: DataSource) {
+    if (!window.confirm(`Disable ${source.name}? New connection tests will stop immediately.`))
+      return;
+    startTransition(async () => {
+      const result = await disableSource(source.id);
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      setSources((current) =>
+        current.map((item) => (item.id === result.source.id ? result.source : item)),
+      );
+      setMessage('Data source disabled. Its credential remains recoverable for 30 days.');
+    });
+  }
+
   return (
     <>
       <section className="card">
@@ -86,15 +108,33 @@ export function DataSourceManager({ initialSources }: { initialSources: DataSour
                 <li className="source-card" key={source.id}>
                   <div>
                     <strong>{source.name}</strong>
-                    <div className="mono">PostgreSQL · {source.endpoint}</div>
+                    <div className="mono">
+                      PostgreSQL · {source.endpoint} · {source.status}
+                    </div>
                   </div>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={isPending || source.status !== 'active'}
                     onClick={() => testConnection(source.id)}
                   >
                     Test connection
                   </button>
+                  {canDelete && source.status === 'active' && (
+                    <button
+                      className="secondary"
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => disable(source)}
+                    >
+                      Disable source
+                    </button>
+                  )}
+                  {source.status === 'disabled' && source.credential_destroy_after && (
+                    <p className="card-hint">
+                      Disabled. Credential destruction is scheduled after{' '}
+                      {new Date(source.credential_destroy_after).toISOString()}.
+                    </p>
+                  )}
                   {test && (
                     <div className="diagnostics" aria-live="polite">
                       <p>

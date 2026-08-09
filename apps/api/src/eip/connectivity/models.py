@@ -58,6 +58,13 @@ class DataSource(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    credential_destroy_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    credential_destroyed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "idempotency_key", name="uq_data_source_tenant_idempotency"),
@@ -71,7 +78,23 @@ class DataSource(Base):
             "endpoint NOT LIKE '%://%' AND endpoint NOT LIKE '%@%'",
             name="ck_data_source_safe_endpoint",
         ),
+        CheckConstraint(
+            "(status='active' AND disabled_at IS NULL "
+            "AND credential_destroy_after IS NULL "
+            "AND credential_destroyed_at IS NULL) OR "
+            "(status='disabled' AND disabled_at IS NOT NULL "
+            "AND credential_destroy_after IS NOT NULL "
+            "AND credential_destroy_after = disabled_at + interval '30 days' "
+            "AND (credential_destroyed_at IS NULL "
+            "OR credential_destroyed_at >= credential_destroy_after))",
+            name="ck_data_source_retention_lifecycle",
+        ),
         Index("ix_data_source_tenant_name", "tenant_id", "name"),
+        Index(
+            "ix_data_source_credential_destruction_due",
+            "credential_destroy_after",
+            postgresql_where=text("credential_destroyed_at IS NULL AND status='disabled'"),
+        ),
     )
 
 

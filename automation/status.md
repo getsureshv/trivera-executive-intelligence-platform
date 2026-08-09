@@ -19,15 +19,15 @@ secret-adapter work.
 
 ## Live handshake
 
-- Timestamp: 2026-08-09 01:50 -05:00 (America/Chicago)
-- Phase/stage: Phase 2, Stage 3 of 4 — Add Source / Test Connection experience
-- Status: PASSED
-- Progress: 100% of Stage 3
+- Timestamp: 2026-08-09 02:05 -05:00 (America/Chicago)
+- Phase/stage: Phase 2, Stage 4 of 4 — adversarial closeout and deletion/retention
+- Status: VERIFYING
+- Progress: 98% of Stage 4
 - Owner: Codex
-- Evidence: real Add Source → Test Connection passed; complete browser suite 12 passed;
-  API/PostgreSQL 372 and worker/Redis 22 passed with zero skips; web checks/build passed
-- Commit: `2f5a285abedc00225a9eda06326f5110c10a382d`
-- CI link: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31299809489
-- Next action: records-only closeout commit and CI, clean repository, then Stage 4 assignment
+- Evidence: focused PostgreSQL 10, API/PostgreSQL 349, Keycloak 28,
+  worker/PostgreSQL/Redis 22, and Playwright 12 passed with zero skips; static checks passed
+- Commit: not yet committed
+- CI link: pending implementation, review, and real verification
+- Next action: focused Stage 4 commit, push, and GitHub Actions gate
 - Product-owner action required: no
-- Last heartbeat: 2026-08-09 01:56 -05:00 — Stage 3 implementation CI all green
+- Last heartbeat: 2026-08-09 03:12 -05:00 — complete local verification passed; CI pending

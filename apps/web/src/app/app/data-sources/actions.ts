@@ -4,7 +4,13 @@ import { randomUUID } from 'node:crypto';
 
 import type { ConnectionTest, DataSource } from '@eip/contracts';
 
-import { ApiError, createDataSource, fetchConnectionTest, requestConnectionTest } from '@/lib/api';
+import {
+  ApiError,
+  createDataSource,
+  disableDataSource,
+  fetchConnectionTest,
+  requestConnectionTest,
+} from '@/lib/api';
 
 export interface ActionFailure {
   ok: false;
@@ -87,6 +93,14 @@ export async function beginTest(sourceId: string): Promise<TestSuccess | ActionF
 export async function pollTest(pollUrl: string): Promise<TestSuccess | ActionFailure> {
   try {
     return { ok: true, test: await fetchConnectionTest(pollUrl) };
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function disableSource(sourceId: string): Promise<CreateSuccess | ActionFailure> {
+  try {
+    return { ok: true, source: await disableDataSource(sourceId) };
   } catch (error) {
     return failure(error);
   }

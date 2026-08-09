@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import signal
+from datetime import UTC, datetime
 
 import uvicorn
 from starlette.applications import Starlette
@@ -38,6 +39,7 @@ from eip.platform.db import (
     create_session_factory,
 )
 from eip.platform.logging import configure_logging, get_logger
+from eip.platform.secretstore import build_secret_store
 from eip.platform.settings import Settings, get_settings
 from eip.platform.telemetry import configure_telemetry
 from eip_worker.broker import (
@@ -46,6 +48,7 @@ from eip_worker.broker import (
     start_interactive_consumer,
     stop_interactive_consumer,
 )
+from eip_worker.maintenance import due_tenants, run_tenant_maintenance
 from eip_worker.outbox import PublishedMessage, relay_once
 
 _log = get_logger("worker.main")
@@ -67,6 +70,7 @@ class Worker:
         self._db_ready = False
         self._broker_ready = False
         self._interactive_consumer: object | None = None
+        self._secrets = build_secret_store(settings)
 
     @property
     def ready(self) -> bool:
@@ -106,6 +110,11 @@ class Worker:
                         enqueue_connection_test(self._settings, message.payload)
 
                 published = await relay_once(self._app_factory, batch_size=batch, dispatch=dispatch)
+                now = datetime.now(UTC)
+                for tenant_id in await due_tenants(self._app_factory, now=now):
+                    await run_tenant_maintenance(
+                        self._app_factory, self._secrets, tenant_id, now=now
+                    )
             except Exception:
                 _log.exception("worker.relay_failed")
                 self._db_ready = False

@@ -51,11 +51,15 @@ class SourceResponse(BaseModel):
     credential_configured: bool = True
     created_at: datetime
     updated_at: datetime
+    disabled_at: datetime | None
+    credential_destroy_after: datetime | None
+    credential_destroyed_at: datetime | None
 
 
 ReadContext = Annotated[TenantContext, Depends(require(Capability.SOURCE_READ))]
 CreateContext = Annotated[TenantContext, Depends(require(Capability.SOURCE_CREATE))]
 UpdateContext = Annotated[TenantContext, Depends(require(Capability.SOURCE_UPDATE))]
+DeleteContext = Annotated[TenantContext, Depends(require(Capability.SOURCE_DELETE))]
 
 
 def source_response(row: DataSource) -> SourceResponse:
@@ -186,6 +190,34 @@ async def update_source(
             resource_type="data_source",
             resource_id=str(row.id),
             detail={"changed_fields": changed},
+        )
+    _set_etag(http_response, row)
+    return source_response(row)
+
+
+@router.delete("/{source_id}", response_model=SourceResponse)
+async def delete_source(
+    source_id: uuid.UUID,
+    session: TenantSession,
+    context: DeleteContext,
+    factory: SessionFactoryDep,
+    http_response: Response,
+) -> SourceResponse:
+    try:
+        row, changed = await service.disable(session, context, source_id)
+    except NotFoundError:
+        await _record_denial(factory, context, source_id)
+        raise
+    if changed:
+        await record(
+            session,
+            context,
+            action=AuditAction.SOURCE_DELETED,
+            resource_type="data_source",
+            resource_id=str(row.id),
+            detail={
+                "changed_fields": ["status", "version", "disabled_at", "credential_destroy_after"]
+            },
         )
     _set_etag(http_response, row)
     return source_response(row)

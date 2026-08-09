@@ -127,6 +127,7 @@ async def execute_connection_test(
             job.data_source_id != source.id
             or job.source_version != envelope.source_version
             or source.version != envelope.source_version
+            or source.status != "active"
             or job.attempt != envelope.attempt
             or job.idempotency_key != envelope.idempotency_key
         ):
@@ -168,6 +169,7 @@ async def execute_connection_test(
             or job.attempt != envelope.attempt
             or job.source_version != envelope.source_version
             or source.version != envelope.source_version
+            or source.status != "active"
         ):
             if job is not None and job.status == "running" and job.attempt == envelope.attempt:
                 job.status = "stale"
@@ -216,6 +218,7 @@ async def execute_connection_test(
             or job.attempt != envelope.attempt
             or job.source_version != envelope.source_version
             or source_now.version != envelope.source_version
+            or source_now.status != "active"
         ):
             if job.attempt == envelope.attempt and job.status == "running":
                 job.status = "stale"
