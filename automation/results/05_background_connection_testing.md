@@ -38,5 +38,8 @@ No excluded Phase 2 or post-Phase-2 capability was added.
 
 **PASS — ready for the focused Stage 2 commit, push, and CI gate.**
 
-- Commit: pending
-- CI: pending
+- Implementation commit: `60844f7ddc3f1dc1b28b81a86811f13f604fb847`
+- CI portability repair commits: `bec20ac0470ac24d5c1f14ab0727947c65fc7ff6`,
+  `1bd6d56db589ffcd68605170d45a1a0db1e7b4ca`
+- CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31298343373
+  — all seven required jobs passed
