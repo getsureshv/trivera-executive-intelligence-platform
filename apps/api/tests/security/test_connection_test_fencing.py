@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import socket
 import uuid
 from typing import Any
 
@@ -14,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from eip.connectivity.postgresql import SystemResolver
 from eip.platform.secrets import SecretRef, SecretStore, SecretValue
 from eip.platform.settings import Settings
 from tests.conftest import Fixtures, auth, token_for
@@ -113,8 +113,13 @@ async def test_superseded_attempt_cannot_read_old_secret_or_overwrite_new_result
         reached_pause.set()
         await resume_a.wait()
 
-    pg_address = socket.gethostbyname(database_host)
-    live_settings = settings.model_copy(update={"connector_egress_allowlist": f"{pg_address}/32"})
+    resolution = SystemResolver().resolve(database_host)
+    assert resolution.addresses
+    allowlist = ",".join(
+        f"{address}/32" if ":" not in address else f"{address}/128"
+        for address in resolution.addresses
+    )
+    live_settings = settings.model_copy(update={"connector_egress_allowlist": allowlist})
     task_a = asyncio.create_task(
         execute_connection_test(
             app_sessions, live_settings, secrets, payload_a, before_execution_fence=pause_a
