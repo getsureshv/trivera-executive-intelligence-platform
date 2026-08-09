@@ -21,8 +21,7 @@
 
   --radius: 8px;
   --gap: 16px;
-  --font:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
 }
 
@@ -217,7 +216,12 @@ th {
 /* --- states --------------------------------------------------------------- */
 
 .skeleton {
-  background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--border) 50%, var(--surface-sunken) 75%);
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--border) 50%,
+    var(--surface-sunken) 75%
+  );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
   border-radius: 4px;
@@ -332,4 +336,50 @@ button.secondary {
   color: var(--text-muted);
   padding: 4px 12px;
   font-size: 0.82rem;
+}
+
+.source-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.source-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.source-card > button {
+  justify-self: start;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 12px;
+}
+.diagnostics ol {
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+.diagnostics li {
+  margin: 6px 0;
+}
+.diagnostics li[data-status='fail'] {
+  color: var(--error);
+}
+
+@media (max-width: 560px) {
+  .app-main {
+    padding: 16px;
+  }
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  table {
+    display: block;
+    overflow-x: auto;
+  }
 }

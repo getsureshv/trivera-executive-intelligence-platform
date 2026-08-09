@@ -127,6 +127,32 @@ export interface UpdateDataSourceRequest {
   credential?: string;
 }
 
+export type DiagnosticType =
+  'network' | 'tls' | 'authentication' | 'authorization' | 'metadata_access' | 'latency';
+
+export interface ConnectionDiagnostic {
+  type: DiagnosticType;
+  status: 'pass' | 'fail' | 'skipped';
+  code: string;
+  message: string;
+  remediation_hint: string | null;
+  duration_ms: number;
+}
+
+export interface ConnectionTest {
+  id: string;
+  data_source_id: string;
+  source_version: number;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'stale';
+  checks: ConnectionDiagnostic[];
+  overall_code: string | null;
+  attempt: number;
+  queued_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  poll_url: string;
+}
+
 // --- errors ----------------------------------------------------------------
 
 /**

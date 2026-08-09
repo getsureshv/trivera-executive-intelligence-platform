@@ -261,6 +261,9 @@ jobs:
       EIP_API_BASE_URL: http://localhost:8000
       EIP_WEB_BASE_URL: http://localhost:3000
       EIP_ENV: local
+      # The source PostgreSQL endpoint is on Compose's private bridge. This is
+      # an explicit CI-only controlled-network exception, not a product default.
+      EIP_CONNECTOR_EGRESS_ALLOWLIST: 172.16.0.0/12
 
     steps:
       - uses: actions/checkout@v4
@@ -279,6 +282,20 @@ jobs:
         run: |
           docker compose -f infra/docker-compose.yml exec -T api \
             sh -c "cd /app/apps/api && python -m eip.scripts.seed_demo"
+
+      - name: Provision temporary PostgreSQL source login
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_USER="eip_e2e_source_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          SOURCE_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::${SOURCE_PASSWORD}"
+          printf "EIP_E2E_SOURCE_USER=%s\n" "${SOURCE_USER}" >> "${GITHUB_ENV}"
+          printf "EIP_E2E_SOURCE_PASSWORD=%s\n" "${SOURCE_PASSWORD}" >> "${GITHUB_ENV}"
+          printf "EIP_E2E_SOURCE_HOST=postgres\n" >> "${GITHUB_ENV}"
+          printf "CREATE ROLE %s LOGIN PASSWORD '%s'; GRANT CONNECT ON DATABASE eip TO %s; GRANT USAGE ON SCHEMA public TO %s; GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s;\n" \
+            "${SOURCE_USER}" "${SOURCE_PASSWORD}" "${SOURCE_USER}" "${SOURCE_USER}" "${SOURCE_USER}" \
+            | docker compose -f infra/docker-compose.yml exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d eip >/dev/null
 
       - run: pnpm install --frozen-lockfile
 

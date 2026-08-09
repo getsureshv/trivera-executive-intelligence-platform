@@ -48,6 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
             <nav aria-label="Primary">
               <a href="/app">Overview</a>
+              {' · '}
+              <a href="/app/data-sources">Data sources</a>
             </nav>
           </header>
 

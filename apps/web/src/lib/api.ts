@@ -23,6 +23,9 @@ import type {
   Membership,
   ProblemDocument,
   ReadinessResponse,
+  DataSource,
+  CreateDataSourceRequest,
+  ConnectionTest,
 } from '@eip/contracts';
 
 import { ApiError } from './errors';
@@ -37,12 +40,14 @@ interface RequestOptions {
   body?: unknown;
   /** Seconds to cache. Defaults to no caching — this is live operational data. */
   revalidate?: number;
+  headers?: Record<string, string>;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { authenticated = true, method = 'GET', body, revalidate } = options;
 
   const headers: Record<string, string> = { Accept: 'application/json' };
+  Object.assign(headers, options.headers);
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
   if (authenticated) {
@@ -110,6 +115,38 @@ export function fetchMemberships(): Promise<Membership[]> {
 
 export function fetchAuditEvents(limit = 20): Promise<AuditEvent[]> {
   return request<AuditEvent[]>(`/v1/audit-events?limit=${limit}`);
+}
+
+export function fetchDataSources(): Promise<DataSource[]> {
+  return request<DataSource[]>('/v1/data-sources');
+}
+
+export function createDataSource(
+  payload: CreateDataSourceRequest,
+  idempotencyKey: string,
+): Promise<DataSource> {
+  return request<DataSource>('/v1/data-sources', {
+    method: 'POST',
+    body: payload,
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
+export function requestConnectionTest(
+  sourceId: string,
+  idempotencyKey: string,
+): Promise<ConnectionTest> {
+  return request<ConnectionTest>(`/v1/data-sources/${encodeURIComponent(sourceId)}/test`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
+export function fetchConnectionTest(pollUrl: string): Promise<ConnectionTest> {
+  if (!/^\/v1\/connection-tests\/[0-9a-f-]+$/i.test(pollUrl)) {
+    throw new ApiError(400, null);
+  }
+  return request<ConnectionTest>(pollUrl);
 }
 
 export { API_BASE_URL, ApiError };
