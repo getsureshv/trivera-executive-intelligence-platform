@@ -156,6 +156,91 @@ export interface ConnectionTest {
   poll_url: string;
 }
 
+// --- governed executive intelligence -------------------------------------
+
+export type SeededDemoOrigin = 'seeded_demo';
+export type DecimalString = string;
+
+export interface MetricPeriod {
+  kind: 'calendar_ytd';
+  timezone: 'America/Chicago';
+  start: string;
+  end: string;
+  as_of_at: string;
+}
+
+export interface MetricProvenance {
+  configuration_version: number;
+  snapshot_id: string;
+  calculated_at: string;
+  dataset_id: string;
+  origin: SeededDemoOrigin;
+  origin_label: 'Demo dataset / seeded demonstration data';
+  observation_basis: 'seeded_demo_observations_not_live_extraction';
+  selected_source: SelectedSourceHealth;
+}
+
+export interface SelectedSourceHealth {
+  data_source_id: string;
+  connection_test_id: string;
+  source_version: number;
+  connection_status: 'succeeded';
+  /** Connection health is real; it does not claim the seeded revenue was extracted live. */
+  relationship: 'selected_source_connection_health_only';
+}
+
+export interface MetricAuthorization {
+  row_scope_applied: true;
+  redactions: string[];
+}
+
+export interface GovernedMetricEnvelope {
+  metric_id: string;
+  metric_version: number;
+  metric_name: string;
+  period: MetricPeriod;
+  value: DecimalString;
+  prior_value: DecimalString;
+  target: DecimalString;
+  unit: string;
+  format: string;
+  freshness_status: 'fresh' | 'stale';
+  freshness_as_of: string;
+  quality_status: 'pass' | 'warn' | 'fail';
+  accountable_owner: string;
+  provenance: MetricProvenance;
+  authorization: MetricAuthorization;
+  allowed_drill_down: string[];
+  lineage_handle: string;
+}
+
+export interface LineageNode {
+  id: string;
+  kind:
+    | 'widget'
+    | 'metric_version'
+    | 'semantic_field'
+    | 'field_binding'
+    | 'source_field'
+    | 'source_object'
+    | 'data_source';
+  label: string;
+}
+
+export interface LineageEdge {
+  from: string;
+  to: string;
+  relation: string;
+}
+
+export interface LineageEnvelope {
+  configuration_version: number;
+  origin: SeededDemoOrigin;
+  nodes: LineageNode[];
+  edges: LineageEdge[];
+  authorization: MetricAuthorization;
+}
+
 // --- errors ----------------------------------------------------------------
 
 /**

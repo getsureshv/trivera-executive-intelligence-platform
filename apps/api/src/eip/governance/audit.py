@@ -88,6 +88,10 @@ class AuditAction:
     CONNECTION_TEST_COMPLETED = "connection_test.completed"
     CONNECTION_TEST_FAILED = "connection_test.failed"
     CONNECTION_TEST_DENIED = "connection_test.denied"
+    DASHBOARD_VIEWED = "dashboard.viewed"
+    METRIC_QUERIED = "metric.queried"
+    METRIC_DRILLDOWN_QUERIED = "metric.drilldown_queried"
+    LINEAGE_VIEWED = "lineage.viewed"
 
     # background processing (ADR-009)
     OUTBOX_RELAYED = "outbox.relayed"

@@ -27,14 +27,19 @@ from __future__ import annotations
 from eip.connectivity.models import ConnectionTest, DataSource, DataSourceAcl
 from eip.governance.models import AuditChainHead, AuditEvent, OutboxMessage
 from eip.identity.models import AppUser, Membership, Role, RoleCapability, Tenant
+from eip.intelligence.models import ConfigurationBundle, DemoDataset, DemoMetadata, GovernedFact
 
 __all__ = [
     "AppUser",
     "AuditChainHead",
     "AuditEvent",
+    "ConfigurationBundle",
     "ConnectionTest",
     "DataSource",
     "DataSourceAcl",
+    "DemoDataset",
+    "DemoMetadata",
+    "GovernedFact",
     "Membership",
     "OutboxMessage",
     "Role",

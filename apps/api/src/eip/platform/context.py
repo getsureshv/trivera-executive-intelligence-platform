@@ -44,6 +44,9 @@ class Capability(StrEnum):
     SOURCE_DELETE = "source.delete"
     SOURCE_TEST = "source.test"
     SOURCE_ACL_MANAGE = "source.acl.manage"
+    EXECUTIVE_READ = "executive.read"
+    METRIC_QUERY = "metric.query"
+    LINEAGE_READ = "lineage.read"
     # Platform-staff only. Never granted to a tenant role.
     PLATFORM_TENANT_PROVISION = "platform.tenant.provision"
 
@@ -87,6 +90,9 @@ ROLE_CAPABILITIES: dict[RoleCode, frozenset[Capability]] = {
             Capability.SOURCE_DELETE,
             Capability.SOURCE_TEST,
             Capability.SOURCE_ACL_MANAGE,
+            Capability.EXECUTIVE_READ,
+            Capability.METRIC_QUERY,
+            Capability.LINEAGE_READ,
         }
     ),
     RoleCode.DATA_STEWARD: frozenset(
@@ -99,10 +105,21 @@ ROLE_CAPABILITIES: dict[RoleCode, frozenset[Capability]] = {
             Capability.SOURCE_UPDATE,
             Capability.SOURCE_TEST,
             Capability.SOURCE_ACL_MANAGE,
+            Capability.EXECUTIVE_READ,
+            Capability.METRIC_QUERY,
+            Capability.LINEAGE_READ,
         }
     ),
-    RoleCode.EXECUTIVE: frozenset({Capability.TENANT_READ, Capability.MEMBERSHIP_READ}),
-    RoleCode.VIEWER: frozenset({Capability.TENANT_READ}),
+    RoleCode.EXECUTIVE: frozenset(
+        {
+            Capability.TENANT_READ,
+            Capability.MEMBERSHIP_READ,
+            Capability.EXECUTIVE_READ,
+            Capability.METRIC_QUERY,
+            Capability.LINEAGE_READ,
+        }
+    ),
+    RoleCode.VIEWER: frozenset({Capability.TENANT_READ, Capability.EXECUTIVE_READ}),
 }
 
 

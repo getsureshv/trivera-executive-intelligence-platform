@@ -156,7 +156,7 @@ class TestMigrations:
         # The current head. Update when a migration is added, so that a
         # forgotten `alembic upgrade` in an environment is caught here rather
         # than by a confusing failure elsewhere.
-        assert revision == "0007_source_retention"
+        assert revision == "0008_demo_metadata"
 
     async def test_seed_roles_are_present(self, app_engine: AsyncEngine) -> None:
         async with app_engine.connect() as conn:

@@ -197,6 +197,20 @@ async def _reset(engine: AsyncEngine) -> None:
     would leak state between tests.
     """
     async with engine.begin() as conn:
+        demo_bundles = (
+            await conn.execute(
+                text(
+                    "SELECT DISTINCT b.tenant_id,b.id FROM configuration_bundle b "
+                    "JOIN demo_dataset d ON d.tenant_id=b.tenant_id AND d.bundle_id=b.id "
+                    "WHERE d.origin='seeded_demo'"
+                )
+            )
+        ).all()
+        for tenant_id, bundle_id in demo_bundles:
+            await conn.execute(
+                text("SELECT eip_reset_seeded_demo(:tenant_id,:bundle_id)"),
+                {"tenant_id": tenant_id, "bundle_id": bundle_id},
+            )
         for table in _RESET_ORDER:
             await conn.execute(text(f"DELETE FROM {table}"))
 

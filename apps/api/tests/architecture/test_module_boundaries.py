@@ -31,7 +31,15 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "eip"
 
 #: Contexts, in dependency order. Each may depend on `platform` and on the
 #: public surface of those listed before it.
-CONTEXTS = ("platform", "identity", "governance", "dataplane", "connectivity", "api")
+CONTEXTS = (
+    "platform",
+    "identity",
+    "governance",
+    "dataplane",
+    "connectivity",
+    "intelligence",
+    "api",
+)
 
 #: Operational entry points, not bounded contexts. They compose everything, are
 #: never imported by application code, and are excluded from the graph rules.
@@ -45,9 +53,10 @@ ALLOWED: dict[str, set[str]] = {
     "governance": {"platform"},
     "dataplane": {"platform"},
     "connectivity": {"platform"},
+    "intelligence": {"platform"},
     # The HTTP layer composes everything; it owns no domain logic itself.
-    "api": {"platform", "identity", "governance", "dataplane", "connectivity"},
-    "scripts": {"platform", "identity", "governance", "dataplane", "connectivity"},
+    "api": {"platform", "identity", "governance", "dataplane", "connectivity", "intelligence"},
+    "scripts": {"platform", "identity", "governance", "dataplane", "connectivity", "intelligence"},
 }
 
 
@@ -148,7 +157,9 @@ def test_domain_code_does_not_import_a_database_driver() -> None:
     )
 
 
-@pytest.mark.parametrize("context", ["identity", "governance", "dataplane", "connectivity"])
+@pytest.mark.parametrize(
+    "context", ["identity", "governance", "dataplane", "connectivity", "intelligence"]
+)
 def test_contexts_do_not_import_api_internals(context: str) -> None:
     """Dependencies point inward. A domain context importing the HTTP layer
     inverts the architecture and creates an import cycle."""

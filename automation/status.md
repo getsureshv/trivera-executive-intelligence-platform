@@ -19,16 +19,17 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 ## Live handshake
 
-- Timestamp: 2026-08-09 10:48 -05:00 (America/Chicago)
-- Phase/stage: CEO demonstration authorization baseline before Stage 1 of 4
-- Status: ASSIGNED — approved entry records awaiting baseline CI
-- Progress: 2% of Stage 1
+- Timestamp: 2026-08-09 14:17 -05:00 (America/Chicago)
+- Phase/stage: CEO demonstration Stage 1 of 4 — frozen shared metadata and contracts
+- Status: VERIFYING — all local gates passed; focused commit is next
+- Progress: 99% of Stage 1
 - Owner: Codex
-- Evidence: `docs/25_CEO_DEMONSTRATION_VERTICAL_SLICE_ENTRY_REPORT.md` reconciles the
-  accepted ADRs, completed Phase 2 boundary, four sequential stages, tests, and exclusions
+- Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
+  passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
+  Prettier, TypeScript lint/typecheck, and 8 web unit tests passed. Evidence is recorded in
+  `automation/results/08_ceo_demo_shared_metadata_contracts.md`.
 - Phase 2 final commit: `a1cf2c741875655cb88cb55c6758c19fa1988171`
 - Phase 2 final CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31321259794
-- Next action: commit/push the approved entry baseline, require green CI and clean repository,
-  then assign frozen shared metadata/contracts Stage 1 to Claude
+- Next action: create the focused Stage 1 commit, push, and require all seven CI jobs green
 - Product-owner action required: no
-- Last heartbeat: 2026-08-09 10:48 -05:00 — defaults approved; baseline records in progress
+- Last heartbeat: 2026-08-09 14:17 -05:00 — all local gates green; preparing focused commit

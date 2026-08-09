@@ -1,0 +1,181 @@
+{
+  "dataset": {
+    "code": "ceo_demo",
+    "label": "Demo dataset / seeded demonstration data",
+    "origin": "seeded_demo",
+    "description": "Explicitly seeded demonstration observations; not live customer analytics.",
+    "as_of_at": "2026-08-11T17:00:00-05:00",
+    "change_reason": "Approved CEO demonstration baseline",
+    "owner_label": "Chief Revenue Officer",
+    "quality_status": "pass",
+    "quality_code": "RECONCILED",
+    "freshness_status": "fresh",
+    "freshness_code": "AS_OF_APPROVED"
+  },
+  "metadata": [
+    {
+      "kind": "source_object",
+      "code": "revenue_records",
+      "name": "Revenue records",
+      "attributes": { "table_name": "demo_revenue" }
+    },
+    {
+      "kind": "source_field",
+      "code": "revenue_amount",
+      "name": "Amount",
+      "parent": "source_object:revenue_records",
+      "attributes": { "field_name": "amount", "data_type": "numeric" }
+    },
+    {
+      "kind": "source_field",
+      "code": "segment_ref",
+      "name": "Segment reference",
+      "parent": "source_object:revenue_records",
+      "attributes": { "field_name": "segment_ref", "data_type": "text" }
+    },
+    {
+      "kind": "semantic_entity",
+      "code": "revenue",
+      "name": "Revenue",
+      "attributes": { "grain": "revenue_record", "time_anchor": "recognized_at" }
+    },
+    {
+      "kind": "semantic_field",
+      "code": "revenue_amount",
+      "name": "Revenue.Amount",
+      "parent": "semantic_entity:revenue",
+      "related": "source_field:revenue_amount",
+      "attributes": { "classification": "measure", "additive": true }
+    },
+    {
+      "kind": "semantic_field",
+      "code": "revenue_segment",
+      "name": "Revenue.SegmentRef",
+      "parent": "semantic_entity:revenue",
+      "related": "source_field:segment_ref",
+      "attributes": { "classification": "dimension", "additive": false }
+    },
+    {
+      "kind": "dimension",
+      "code": "segment",
+      "name": "Segment",
+      "parent": "semantic_entity:revenue",
+      "attributes": { "ordered": true }
+    },
+    {
+      "kind": "dimension_value",
+      "code": "people",
+      "name": "People",
+      "parent": "dimension:segment",
+      "attributes": { "order": 1 }
+    },
+    {
+      "kind": "dimension_value",
+      "code": "process",
+      "name": "Process",
+      "parent": "dimension:segment",
+      "attributes": { "order": 2 }
+    },
+    {
+      "kind": "dimension_value",
+      "code": "technology",
+      "name": "Technology",
+      "parent": "dimension:segment",
+      "attributes": { "order": 3 }
+    },
+    {
+      "kind": "entity_binding",
+      "code": "revenue_binding",
+      "name": "Revenue binding",
+      "parent": "semantic_entity:revenue",
+      "related": "source_object:revenue_records",
+      "attributes": { "grain": "revenue_record", "transformation": "identity" }
+    },
+    {
+      "kind": "field_binding",
+      "code": "amount_binding",
+      "name": "Amount binding",
+      "parent": "semantic_field:revenue_amount",
+      "related": "source_field:revenue_amount",
+      "attributes": { "transformation": "identity" }
+    },
+    {
+      "kind": "field_binding",
+      "code": "segment_binding",
+      "name": "Segment binding",
+      "parent": "semantic_field:revenue_segment",
+      "related": "source_field:segment_ref",
+      "attributes": { "transformation": "identity" }
+    },
+    {
+      "kind": "metric",
+      "code": "revenue_ytd",
+      "name": "Revenue YTD",
+      "attributes": { "owner": "Chief Revenue Officer" }
+    },
+    {
+      "kind": "metric_version",
+      "code": "revenue_ytd",
+      "name": "Revenue YTD v1",
+      "parent": "metric:revenue_ytd",
+      "related": "semantic_field:revenue_amount",
+      "attributes": {
+        "expression": { "kind": "aggregation", "function": "sum", "field": "Revenue.Amount" },
+        "period": "calendar_ytd",
+        "timezone": "America/Chicago",
+        "allowed_dimension": "segment",
+        "direction": "higher_is_better",
+        "format": "currency",
+        "unit": "USD"
+      }
+    },
+    {
+      "kind": "quality_result",
+      "code": "revenue_quality",
+      "name": "Quality passed",
+      "related": "metric_version:revenue_ytd",
+      "status": "pass",
+      "attributes": { "code": "RECONCILED" }
+    },
+    {
+      "kind": "freshness_result",
+      "code": "revenue_freshness",
+      "name": "Freshness current",
+      "related": "metric_version:revenue_ytd",
+      "status": "fresh",
+      "attributes": { "code": "AS_OF_APPROVED" }
+    },
+    {
+      "kind": "dashboard",
+      "code": "executive",
+      "name": "Executive Command Center",
+      "attributes": { "audience": "executive" }
+    },
+    {
+      "kind": "widget",
+      "code": "revenue_ytd",
+      "name": "Revenue YTD",
+      "parent": "dashboard:executive",
+      "related": "metric_version:revenue_ytd",
+      "attributes": { "type": "kpi" }
+    },
+    {
+      "kind": "attention_rule",
+      "code": "largest_negative_target_variance",
+      "name": "Requires Attention",
+      "parent": "widget:revenue_ytd",
+      "related": "dimension:segment",
+      "attributes": { "comparator": "largest_negative_target_variance" }
+    }
+  ],
+  "facts": [
+    { "kind": "observation", "dimension": null, "value": "4210500", "prior_value": "3980000" },
+    { "kind": "target", "dimension": null, "value": "4500000" },
+    { "kind": "observation", "dimension": "people", "value": "1850000" },
+    { "kind": "observation", "dimension": "process", "value": "1410500" },
+    { "kind": "observation", "dimension": "technology", "value": "950000" },
+    { "kind": "target", "dimension": "people", "value": "1900000" },
+    { "kind": "target", "dimension": "process", "value": "1450000" },
+    { "kind": "target", "dimension": "technology", "value": "1150000" }
+  ]
+}
