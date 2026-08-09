@@ -40,7 +40,12 @@ test('adds a PostgreSQL source and completes a safe connection test', async ({ p
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Disable source' }).last().click();
   await expect(page.getByRole('status').filter({ hasText: 'Data source disabled.' })).toBeVisible();
-  await expect(page.locator('.source-card').last().getByText(/· disabled$/)).toBeVisible();
+  await expect(
+    page
+      .locator('.source-card')
+      .last()
+      .getByText(/· disabled$/),
+  ).toBeVisible();
 
   expect(page.url()).not.toContain(sentinel);
   expect(await page.content()).not.toContain(sentinel);
