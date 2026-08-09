@@ -38,5 +38,6 @@ real infrastructure walkthrough and all regression gates.
 
 **PASS — ready for the focused Stage 3 commit, push, and CI gate.**
 
-- Commit: pending
-- CI: pending
+- Commit: `2f5a285abedc00225a9eda06326f5110c10a382d`
+- CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31299809489
+  — all seven required jobs passed
