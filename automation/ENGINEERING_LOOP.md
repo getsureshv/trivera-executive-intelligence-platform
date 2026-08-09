@@ -45,8 +45,10 @@ of scope unless a later accepted entry report explicitly authorizes them.
 
 ## Current handshake
 
-- Current capability: Phase 2 records-only closeout.
-- Owner: Codex, then GitHub Actions.
-- Evidence: implementation `c981cda`, approved records repair `e4563cf`, CI 31320964652 green.
-- Next action: records-only commit, push, green CI, clean repository; then CEO entry review.
-- Product-owner action required: no.
+- Current capability: CEO demonstration authorization baseline before Stage 1 of 4.
+- Owner: Codex.
+- Evidence: Phase 2 final records commit `a1cf2c7` and CI 31321259794 are green; CEO entry
+  report 25 is complete and implementation has not started.
+- Next action: commit/push the approved entry baseline, green CI, clean repository; then
+  begin frozen shared metadata/contracts Stage 1.
+- Product-owner action required: no; all entry-review defaults are approved.
