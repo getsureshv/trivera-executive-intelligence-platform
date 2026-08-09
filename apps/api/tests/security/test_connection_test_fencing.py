@@ -11,6 +11,7 @@ import pytest
 from eip_worker.connection_tests import execute_connection_test
 from httpx import AsyncClient
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from eip.platform.secrets import SecretRef, SecretStore, SecretValue
@@ -61,6 +62,10 @@ async def test_superseded_attempt_cannot_read_old_secret_or_overwrite_new_result
     settings: Settings,
 ) -> None:
     """A pauses before side effects; B rotates and wins; A is permanently fenced."""
+    database_url = make_url(settings.db_app_dsn)
+    database_host = database_url.host
+    assert database_host is not None
+    database_port = database_url.port or 5432
     token = await token_for(client, seeded.user_a.email, seeded.tenant_a.id)
     created = await client.post(
         "/v1/data-sources",
@@ -68,7 +73,7 @@ async def test_superseded_attempt_cannot_read_old_secret_or_overwrite_new_result
         json={
             "name": "Fencing PostgreSQL",
             "connector_type": "postgresql",
-            "endpoint": "postgres:5432",
+            "endpoint": f"{database_host}:{database_port}",
             "configuration": {"username": "postgres", "database": "eip", "tls_mode": "disable"},
             "credential": "local_dev_only",
         },
@@ -108,7 +113,7 @@ async def test_superseded_attempt_cannot_read_old_secret_or_overwrite_new_result
         reached_pause.set()
         await resume_a.wait()
 
-    pg_address = socket.gethostbyname("postgres")
+    pg_address = socket.gethostbyname(database_host)
     live_settings = settings.model_copy(update={"connector_egress_allowlist": f"{pg_address}/32"})
     task_a = asyncio.create_task(
         execute_connection_test(
