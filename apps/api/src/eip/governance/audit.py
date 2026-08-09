@@ -77,6 +77,10 @@ class AuditAction:
     TENANT_DEPROVISIONED = "tenant.deprovisioned"
     MEMBERSHIP_GRANTED = "membership.granted"
     MEMBERSHIP_REVOKED = "membership.revoked"
+    SOURCE_CREATED = "source.created"
+    SOURCE_UPDATED = "source.updated"
+    SOURCE_CREDENTIAL_ROTATED = "source.credential_rotated"
+    SOURCE_ACCESS_DENIED = "source.access.denied"
 
     # background processing (ADR-009)
     OUTBOX_RELAYED = "outbox.relayed"

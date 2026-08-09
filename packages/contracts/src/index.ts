@@ -85,6 +85,48 @@ export interface AuditEvent {
   trace_id: string;
 }
 
+// --- data sources ----------------------------------------------------------
+
+export interface PostgreSQLSourceConfiguration {
+  username: string;
+  database: string;
+  tls_mode: 'disable' | 'require';
+  connect_timeout_seconds: number;
+}
+
+export interface DataSource {
+  id: string;
+  name: string;
+  connector_type: 'postgresql';
+  endpoint: string;
+  configuration: PostgreSQLSourceConfiguration;
+  connectivity_mode: 'direct';
+  status: 'active' | 'disabled';
+  version: number;
+  credential_configured: true;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateDataSourceRequest {
+  name: string;
+  connector_type: 'postgresql';
+  endpoint: string;
+  configuration: Partial<PostgreSQLSourceConfiguration> &
+    Pick<PostgreSQLSourceConfiguration, 'username' | 'database'>;
+  /** Write-only. It is never present in a response. */
+  credential: string;
+}
+
+export interface UpdateDataSourceRequest {
+  name?: string;
+  endpoint?: string;
+  configuration?: Partial<PostgreSQLSourceConfiguration> &
+    Pick<PostgreSQLSourceConfiguration, 'username' | 'database'>;
+  /** Write-only replacement. It is never present in a response. */
+  credential?: string;
+}
+
 // --- errors ----------------------------------------------------------------
 
 /**

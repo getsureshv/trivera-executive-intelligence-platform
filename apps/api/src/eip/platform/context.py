@@ -38,6 +38,12 @@ class Capability(StrEnum):
     MEMBERSHIP_READ = "membership.read"
     MEMBERSHIP_MANAGE = "membership.manage"
     AUDIT_READ = "audit.read"
+    SOURCE_READ = "source.read"
+    SOURCE_CREATE = "source.create"
+    SOURCE_UPDATE = "source.update"
+    SOURCE_DELETE = "source.delete"
+    SOURCE_TEST = "source.test"
+    SOURCE_ACL_MANAGE = "source.acl.manage"
     # Platform-staff only. Never granted to a tenant role.
     PLATFORM_TENANT_PROVISION = "platform.tenant.provision"
 
@@ -75,10 +81,25 @@ ROLE_CAPABILITIES: dict[RoleCode, frozenset[Capability]] = {
             Capability.MEMBERSHIP_READ,
             Capability.MEMBERSHIP_MANAGE,
             Capability.AUDIT_READ,
+            Capability.SOURCE_READ,
+            Capability.SOURCE_CREATE,
+            Capability.SOURCE_UPDATE,
+            Capability.SOURCE_DELETE,
+            Capability.SOURCE_TEST,
+            Capability.SOURCE_ACL_MANAGE,
         }
     ),
     RoleCode.DATA_STEWARD: frozenset(
-        {Capability.TENANT_READ, Capability.MEMBERSHIP_READ, Capability.AUDIT_READ}
+        {
+            Capability.TENANT_READ,
+            Capability.MEMBERSHIP_READ,
+            Capability.AUDIT_READ,
+            Capability.SOURCE_READ,
+            Capability.SOURCE_CREATE,
+            Capability.SOURCE_UPDATE,
+            Capability.SOURCE_TEST,
+            Capability.SOURCE_ACL_MANAGE,
+        }
     ),
     RoleCode.EXECUTIVE: frozenset({Capability.TENANT_READ, Capability.MEMBERSHIP_READ}),
     RoleCode.VIEWER: frozenset({Capability.TENANT_READ}),

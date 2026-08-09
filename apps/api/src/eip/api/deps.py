@@ -29,6 +29,7 @@ from eip.platform.context import Capability, PlatformContext, RoleCode, TenantCo
 from eip.platform.db import platform_session, tenant_session, unscoped_session
 from eip.platform.errors import ForbiddenError, UnauthenticatedError
 from eip.platform.logging import bind_context
+from eip.platform.secrets import SecretStore
 from eip.platform.settings import Settings
 
 
@@ -52,6 +53,11 @@ def get_data_plane(request: Request) -> TenantDataPlane:
     return plane
 
 
+def get_secret_store(request: Request) -> SecretStore:
+    store: SecretStore = request.app.state.secret_store
+    return store
+
+
 def get_token_verifier(request: Request) -> TokenVerifier:
     """The environment-appropriate token verifier, built once at startup.
 
@@ -68,6 +74,7 @@ PlatformFactoryDep = Annotated[
     async_sessionmaker[AsyncSession], Depends(get_platform_session_factory)
 ]
 DataPlaneDep = Annotated[TenantDataPlane, Depends(get_data_plane)]
+SecretStoreDep = Annotated[SecretStore, Depends(get_secret_store)]
 VerifierDep = Annotated[TokenVerifier, Depends(get_token_verifier)]
 
 
@@ -121,9 +128,20 @@ async def get_tenant_session(
     session sets ``app.tenant_id``, so PostgreSQL RLS backs the application's
     own filtering.
     """
+    active_session: AsyncSession | None = None
     with bind_context(tenant_id=context.tenant_id, principal_id=context.principal.user_id):
-        async with tenant_session(factory, context) as session:
-            yield session
+        try:
+            async with tenant_session(factory, context) as session:
+                active_session = session
+                yield session
+        except BaseException:
+            # Secret writes cannot share the database transaction. Services
+            # register only newly-created versions here so a failed commit is
+            # compensated without touching the previously usable version.
+            if active_session is not None:
+                for store, ref in active_session.info.get("secret_compensations", []):
+                    await store.delete(ref)
+            raise
 
 
 TenantSession = Annotated[AsyncSession, Depends(get_tenant_session)]
