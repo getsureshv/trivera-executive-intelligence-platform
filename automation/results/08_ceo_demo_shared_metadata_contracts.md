@@ -1,7 +1,7 @@
 # CEO demonstration Stage 1 result — shared metadata and contracts
 
 Date: 2026-08-09
-Result: **PASSED LOCALLY — awaiting commit and CI**
+Result: **PASSED**
 
 ## Delivered
 
@@ -45,5 +45,14 @@ deployment work was added.
   values were added.
 
 The normal development database was restored to migration 0008 and the temporary verifier
-was removed. Commit, push, seven-job CI, and clean-repository evidence are recorded after
-those gates complete.
+was removed.
+
+## Delivery evidence
+
+- Implementation commit: `bff302a59b105b01c1a3677b286b4029e780c609`
+- CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31331092241
+- CI result: all seven jobs passed, including migration/model parity, real PostgreSQL
+  security, real identity-provider security, browser tenant isolation, secret scan, web
+  build, and stack smoke testing.
+- The implementation repository was clean after push; a records-only closeout commit records
+  this immutable evidence before Stage 2.
