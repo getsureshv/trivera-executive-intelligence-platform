@@ -19,19 +19,23 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 ## Live handshake
 
-- Timestamp: 2026-08-09 14:22 -05:00 (America/Chicago)
-- Phase/stage: CEO demonstration Stage 1 of 4 — frozen shared metadata and contracts
-- Status: PASSED — implementation committed, pushed, and seven-job CI green
-- Progress: 100% of Stage 1
+- Timestamp: 2026-08-09 14:45 -05:00 (America/Chicago)
+- Phase/stage: CEO demonstration Stage 2 of 4 — governed query and derived lineage backend
+- Status: VERIFYING — all local Stage 2 gates passed; focused commit is next
+- Progress: 98% of Stage 2
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
   Prettier, TypeScript lint/typecheck, and 8 web unit tests passed. Evidence is recorded in
   `automation/results/08_ceo_demo_shared_metadata_contracts.md`. Implementation commit
   `bff302a59b105b01c1a3677b286b4029e780c609`; CI run 31331092241 passed all seven jobs.
+  Records commit `b7eb156be348efe421cd84731016c7c94e8f0705`; CI run 31331257709
+  passed all seven jobs; local/remote commits match and repository was clean before Stage 2.
+  Stage 2 final Docker evidence: 3 focused and 394 complete real-PG tests passed with zero
+  skips; Ruff, strict mypy, Prettier, TypeScript/contracts, 8 web tests, OpenAPI, audit and
+  captured-log leakage checks passed. Result: `automation/results/09_ceo_demo_governed_query_lineage.md`.
 - Phase 2 final commit: `a1cf2c741875655cb88cb55c6758c19fa1988171`
 - Phase 2 final CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31321259794
-- Next action: commit/push this records-only closeout, require seven-job CI and a clean
-  repository, then write the bounded Stage 2 assignment
+- Next action: create/push the focused Stage 2 commit and require all seven CI jobs green
 - Product-owner action required: no
-- Last heartbeat: 2026-08-09 14:22 -05:00 — Stage 1 implementation CI green; closing records
+- Last heartbeat: 2026-08-09 14:45 -05:00 — all local Stage 2 gates green; preparing commit

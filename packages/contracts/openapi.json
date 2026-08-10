@@ -1,6 +1,39 @@
 {
   "components": {
     "schemas": {
+      "AttentionItem": {
+        "properties": {
+          "dimension_value_id": {
+            "title": "Dimension Value Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_variance": {
+            "title": "Target Variance",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension_value_id",
+          "label",
+          "value",
+          "target",
+          "target_variance"
+        ],
+        "title": "AttentionItem",
+        "type": "object"
+      },
       "AuditEventResponse": {
         "properties": {
           "action": {
@@ -84,7 +117,7 @@
             "type": "string"
           },
           "duration_ms": {
-            "default": 0,
+            "default": 0.0,
             "title": "Duration Ms",
             "type": "number"
           },
@@ -272,6 +305,31 @@
         "title": "CreateTenantRequest",
         "type": "object"
       },
+      "DecimalComparison": {
+        "properties": {
+          "absolute": {
+            "title": "Absolute",
+            "type": "string"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent"
+          }
+        },
+        "required": [
+          "absolute",
+          "percent"
+        ],
+        "title": "DecimalComparison",
+        "type": "object"
+      },
       "DevTokenRequest": {
         "additionalProperties": false,
         "properties": {
@@ -381,6 +439,169 @@
         "title": "DiagnosticResponse",
         "type": "object"
       },
+      "DrillDownValue": {
+        "properties": {
+          "dimension_value_id": {
+            "title": "Dimension Value Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_variance": {
+            "title": "Target Variance",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension_value_id",
+          "label",
+          "value",
+          "target",
+          "target_variance"
+        ],
+        "title": "DrillDownValue",
+        "type": "object"
+      },
+      "GovernedMetricResponse": {
+        "properties": {
+          "accountable_owner": {
+            "title": "Accountable Owner",
+            "type": "string"
+          },
+          "allowed_drill_down": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Drill Down",
+            "type": "array"
+          },
+          "attention": {
+            "$ref": "#/components/schemas/AttentionItem"
+          },
+          "authorization": {
+            "$ref": "#/components/schemas/MetricAuthorization"
+          },
+          "comparison": {
+            "$ref": "#/components/schemas/DecimalComparison"
+          },
+          "drill_down": {
+            "items": {
+              "$ref": "#/components/schemas/DrillDownValue"
+            },
+            "title": "Drill Down",
+            "type": "array"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "freshness_as_of": {
+            "title": "Freshness As Of",
+            "type": "string"
+          },
+          "freshness_status": {
+            "enum": [
+              "fresh",
+              "stale"
+            ],
+            "title": "Freshness Status",
+            "type": "string"
+          },
+          "lineage_handle": {
+            "title": "Lineage Handle",
+            "type": "string"
+          },
+          "metric_id": {
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "metric_name": {
+            "title": "Metric Name",
+            "type": "string"
+          },
+          "metric_version": {
+            "title": "Metric Version",
+            "type": "integer"
+          },
+          "period": {
+            "$ref": "#/components/schemas/MetricPeriod"
+          },
+          "prior_value": {
+            "title": "Prior Value",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/MetricProvenance"
+          },
+          "quality_checks": {
+            "items": {
+              "$ref": "#/components/schemas/QualityCheck"
+            },
+            "title": "Quality Checks",
+            "type": "array"
+          },
+          "quality_status": {
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Quality Status",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_variance": {
+            "$ref": "#/components/schemas/DecimalComparison"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_id",
+          "metric_version",
+          "metric_name",
+          "period",
+          "value",
+          "prior_value",
+          "comparison",
+          "target",
+          "target_variance",
+          "unit",
+          "format",
+          "freshness_status",
+          "freshness_as_of",
+          "quality_status",
+          "quality_checks",
+          "accountable_owner",
+          "provenance",
+          "authorization",
+          "allowed_drill_down",
+          "drill_down",
+          "attention",
+          "lineage_handle"
+        ],
+        "title": "GovernedMetricResponse",
+        "type": "object"
+      },
       "GrantMembershipRequest": {
         "additionalProperties": false,
         "properties": {
@@ -462,6 +683,104 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "LineageEdge": {
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "relation": {
+            "title": "Relation",
+            "type": "string"
+          },
+          "to": {
+            "title": "To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "relation"
+        ],
+        "title": "LineageEdge",
+        "type": "object"
+      },
+      "LineageNode": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "widget",
+              "metric_version",
+              "semantic_field",
+              "field_binding",
+              "source_field",
+              "source_object",
+              "data_source"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "title": "LineageNode",
+        "type": "object"
+      },
+      "LineageResponse": {
+        "properties": {
+          "authorization": {
+            "$ref": "#/components/schemas/MetricAuthorization"
+          },
+          "configuration_version": {
+            "title": "Configuration Version",
+            "type": "integer"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/LineageEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/LineageNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "origin": {
+            "const": "seeded_demo",
+            "title": "Origin",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/MetricProvenance"
+          }
+        },
+        "required": [
+          "configuration_version",
+          "origin",
+          "provenance",
+          "nodes",
+          "edges",
+          "authorization"
+        ],
+        "title": "LineageResponse",
+        "type": "object"
+      },
       "MeResponse": {
         "properties": {
           "capabilities": {
@@ -531,6 +850,164 @@
         "title": "MembershipResponse",
         "type": "object"
       },
+      "MetricAuthorization": {
+        "properties": {
+          "redactions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Redactions",
+            "type": "array"
+          },
+          "row_scope_applied": {
+            "const": true,
+            "title": "Row Scope Applied",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "row_scope_applied",
+          "redactions"
+        ],
+        "title": "MetricAuthorization",
+        "type": "object"
+      },
+      "MetricPeriod": {
+        "properties": {
+          "as_of_at": {
+            "title": "As Of At",
+            "type": "string"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_ytd",
+            "title": "Kind",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "const": "America/Chicago",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "timezone",
+          "start",
+          "end",
+          "as_of_at"
+        ],
+        "title": "MetricPeriod",
+        "type": "object"
+      },
+      "MetricPeriodRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of_at": {
+            "format": "date-time",
+            "title": "As Of At",
+            "type": "string"
+          },
+          "kind": {
+            "const": "calendar_ytd",
+            "title": "Kind",
+            "type": "string"
+          },
+          "timezone": {
+            "const": "America/Chicago",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "timezone",
+          "as_of_at"
+        ],
+        "title": "MetricPeriodRequest",
+        "type": "object"
+      },
+      "MetricProvenance": {
+        "properties": {
+          "calculated_at": {
+            "title": "Calculated At",
+            "type": "string"
+          },
+          "configuration_version": {
+            "title": "Configuration Version",
+            "type": "integer"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "observation_basis": {
+            "const": "seeded_demo_observations_not_live_extraction",
+            "title": "Observation Basis",
+            "type": "string"
+          },
+          "origin": {
+            "const": "seeded_demo",
+            "title": "Origin",
+            "type": "string"
+          },
+          "origin_label": {
+            "const": "Demo dataset / seeded demonstration data",
+            "title": "Origin Label",
+            "type": "string"
+          },
+          "selected_source": {
+            "$ref": "#/components/schemas/SelectedSourceHealth"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configuration_version",
+          "snapshot_id",
+          "calculated_at",
+          "dataset_id",
+          "origin",
+          "origin_label",
+          "observation_basis",
+          "selected_source"
+        ],
+        "title": "MetricProvenance",
+        "type": "object"
+      },
+      "MetricQueryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "group_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group By"
+          },
+          "period": {
+            "$ref": "#/components/schemas/MetricPeriodRequest"
+          }
+        },
+        "required": [
+          "period"
+        ],
+        "title": "MetricQueryRequest",
+        "type": "object"
+      },
       "PrincipalResponse": {
         "properties": {
           "actor_type": {
@@ -553,6 +1030,34 @@
           "actor_type"
         ],
         "title": "PrincipalResponse",
+        "type": "object"
+      },
+      "QualityCheck": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "status",
+          "evaluated_at"
+        ],
+        "title": "QualityCheck",
         "type": "object"
       },
       "ReadinessResponse": {
@@ -596,6 +1101,41 @@
         ],
         "title": "RoleCode",
         "type": "string"
+      },
+      "SelectedSourceHealth": {
+        "properties": {
+          "connection_status": {
+            "const": "succeeded",
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "connection_test_id": {
+            "title": "Connection Test Id",
+            "type": "string"
+          },
+          "data_source_id": {
+            "title": "Data Source Id",
+            "type": "string"
+          },
+          "relationship": {
+            "const": "selected_source_connection_health_only",
+            "title": "Relationship",
+            "type": "string"
+          },
+          "source_version": {
+            "title": "Source Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data_source_id",
+          "connection_test_id",
+          "source_version",
+          "connection_status",
+          "relationship"
+        ],
+        "title": "SelectedSourceHealth",
+        "type": "object"
       },
       "SourceResponse": {
         "properties": {
@@ -1396,6 +1936,55 @@
         ]
       }
     },
+    "/v1/dashboards/executive": {
+      "get": {
+        "operationId": "executive_dashboard_v1_dashboards_executive_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernedMetricResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Executive Dashboard",
+        "tags": [
+          "executive-intelligence"
+        ]
+      }
+    },
     "/v1/data-sources": {
       "get": {
         "operationId": "list_sources_v1_data_sources_get",
@@ -1997,6 +2586,124 @@
         "summary": "List memberships of the caller's organization",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/v1/metrics/revenue_ytd/lineage": {
+      "get": {
+        "operationId": "revenue_lineage_v1_metrics_revenue_ytd_lineage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "config_version",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "Config Version",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revenue Lineage",
+        "tags": [
+          "executive-intelligence"
+        ]
+      }
+    },
+    "/v1/metrics/revenue_ytd/query": {
+      "post": {
+        "operationId": "query_revenue_v1_metrics_revenue_ytd_query_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernedMetricResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Query Revenue",
+        "tags": [
+          "executive-intelligence"
         ]
       }
     },

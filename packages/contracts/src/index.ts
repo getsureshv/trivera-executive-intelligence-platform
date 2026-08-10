@@ -201,17 +201,43 @@ export interface GovernedMetricEnvelope {
   period: MetricPeriod;
   value: DecimalString;
   prior_value: DecimalString;
+  comparison: DecimalComparison;
   target: DecimalString;
+  target_variance: DecimalComparison;
   unit: string;
   format: string;
   freshness_status: 'fresh' | 'stale';
   freshness_as_of: string;
   quality_status: 'pass' | 'warn' | 'fail';
+  quality_checks: QualityCheck[];
   accountable_owner: string;
   provenance: MetricProvenance;
   authorization: MetricAuthorization;
   allowed_drill_down: string[];
+  drill_down: DrillDownValue[];
+  attention: AttentionItem;
   lineage_handle: string;
+}
+
+export interface DrillDownValue {
+  dimension_value_id: string;
+  label: string;
+  value: DecimalString;
+  target: DecimalString;
+  target_variance: DecimalString;
+}
+
+export type AttentionItem = DrillDownValue;
+
+export interface DecimalComparison {
+  absolute: DecimalString;
+  percent: DecimalString | null;
+}
+
+export interface QualityCheck {
+  code: string;
+  status: 'pass' | 'warn' | 'fail';
+  evaluated_at: string;
 }
 
 export interface LineageNode {
@@ -236,6 +262,7 @@ export interface LineageEdge {
 export interface LineageEnvelope {
   configuration_version: number;
   origin: SeededDemoOrigin;
+  provenance: MetricProvenance;
   nodes: LineageNode[];
   edges: LineageEdge[];
   authorization: MetricAuthorization;

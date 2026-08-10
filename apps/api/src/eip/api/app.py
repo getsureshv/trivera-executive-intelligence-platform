@@ -30,7 +30,15 @@ from eip.api.middleware import (
     handle_eip_error,
     handle_unexpected_error,
 )
-from eip.api.routers import admin, connection_tests, data_sources, dev_auth, health, tenancy
+from eip.api.routers import (
+    admin,
+    connection_tests,
+    data_sources,
+    dev_auth,
+    health,
+    intelligence,
+    tenancy,
+)
 from eip.dataplane.registry import (
     build_credential_provider,
     build_data_plane,
@@ -147,6 +155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin.router)
     app.include_router(data_sources.router)
     app.include_router(connection_tests.router)
+    app.include_router(intelligence.router)
 
     # Guard #1 of three: the development token issuer does not exist as a route
     # outside local/ci. See dev_auth.py for the other two.
