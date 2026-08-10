@@ -1,7 +1,7 @@
 # CEO demonstration Stage 2 result — governed query and derived lineage
 
 Date: 2026-08-09
-Result: **PASSED LOCALLY — awaiting commit and CI**
+Result: **PASSED**
 
 ## Delivered
 
@@ -40,5 +40,17 @@ unchanged.
   lineage traversal, audit safety, and captured-log leakage scans executed against PostgreSQL.
 
 No migration, persisted seed, model registry, UI, live source query, cache, discovery,
-extraction, AI, or production deployment change was made. Commit/push/CI evidence is added
-after those gates complete.
+extraction, AI, or production deployment change was made.
+
+## Delivery evidence
+
+- Stage 2 implementation commit: `4e33ec93cfdd27f2bb42c1cf7bbcc229a53225cc`.
+- The first CI run passed six jobs but rejected the generated OpenAPI record as stale:
+  [run 31355400351](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31355400351).
+- Approved generated-contract repair commit:
+  `1ff17964af2e028b70f9c8072b1e3f38bc036df8`. The authoritative live schema changed only
+  the semantically equivalent numeric serialization `0.0` to `0` in the existing health
+  response; no application behavior or Stage 2 API shape changed.
+- Repair CI: [run 31355693558](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31355693558)
+  passed all seven jobs, including live OpenAPI drift, real PostgreSQL/security, browser
+  tenant isolation, identity-provider integration, formatting/types, web, and secret scan.

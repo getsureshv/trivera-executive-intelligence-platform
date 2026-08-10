@@ -19,10 +19,10 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 ## Live handshake
 
-- Timestamp: 2026-08-09 14:45 -05:00 (America/Chicago)
+- Timestamp: 2026-08-09 23:36 -05:00 (America/Chicago)
 - Phase/stage: CEO demonstration Stage 2 of 4 — governed query and derived lineage backend
-- Status: VERIFYING — all local Stage 2 gates passed; focused commit is next
-- Progress: 98% of Stage 2
+- Status: PASSED — reviewed, verified, committed, pushed, and seven-job CI green
+- Progress: 100% of Stage 2
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -33,9 +33,14 @@ secret-adapter work outside a later explicitly accepted entry report.
   passed all seven jobs; local/remote commits match and repository was clean before Stage 2.
   Stage 2 final Docker evidence: 3 focused and 394 complete real-PG tests passed with zero
   skips; Ruff, strict mypy, Prettier, TypeScript/contracts, 8 web tests, OpenAPI, audit and
-  captured-log leakage checks passed. Result: `automation/results/09_ceo_demo_governed_query_lineage.md`.
+  captured-log leakage checks passed. Implementation commit `4e33ec93cfdd27f2bb42c1cf7bbcc229a53225cc`;
+  approved generated-contract repair `1ff17964af2e028b70f9c8072b1e3f38bc036df8`;
+  [CI run 31355693558](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31355693558)
+  passed all seven jobs. Result: `automation/results/09_ceo_demo_governed_query_lineage.md`.
 - Phase 2 final commit: `a1cf2c741875655cb88cb55c6758c19fa1988171`
 - Phase 2 final CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31321259794
-- Next action: create/push the focused Stage 2 commit and require all seven CI jobs green
+- Next action: commit/push this records-only closeout, require seven-job CI green, verify a
+  clean repository, then begin CEO demonstration Stage 3
 - Product-owner action required: no
-- Last heartbeat: 2026-08-09 14:45 -05:00 — all local Stage 2 gates green; preparing commit
+- Last heartbeat: 2026-08-09 23:36 -05:00 — Stage 2 implementation and repair CI green;
+  preparing records-only closeout
