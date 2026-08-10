@@ -117,7 +117,7 @@
             "type": "string"
           },
           "duration_ms": {
-            "default": 0.0,
+            "default": 0,
             "title": "Duration Ms",
             "type": "number"
           },
