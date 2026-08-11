@@ -35,11 +35,11 @@ result come from visibly labelled deterministic seeded demo data; no source extr
 | Shared metadata/contracts | `bff302a59b105b01c1a3677b286b4029e780c609`; records `b7eb156be348efe421cd84731016c7c94e8f0705` | [31331092241](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31331092241) |
 | Governed query/lineage | `4e33ec93cfdd27f2bb42c1cf7bbcc229a53225cc`; generated repair `1ff17964af2e028b70f9c8072b1e3f38bc036df8`; records `d2bede399e63bcec4e78ef3e839206d0726ce6bf` | [31355693558](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31355693558) |
 | Executive browser | `53fca7fc36c236a68545448c8af14138c7325256`; mobile repair `8993ba323310a1268645ed37a54c364a88281f5c`; records `c7bab13a9dbb8506086705f1ea63912ec2c3cbe3` | [31539512265](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31539512265) |
-| Release pack | **Fill after the reviewed Stage 4 commit** | **Fill after all seven jobs pass** |
+| Release pack | `daafd4a9e4d2f6cc5685f07bf320318e137fbf71` | [31542045230](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31542045230) |
 
-The Stage 4 implementation handoff deliberately cannot record its own future commit, CI run,
-or tag. Codex must replace the two bold placeholders with exact immutable evidence after the
-focused commit and green CI, before closeout is declared.
+The Stage 4 implementation handoff deliberately did not predict its own commit, CI run, or
+tag. Codex added the exact immutable evidence above only after the focused commit passed all
+seven GitHub Actions jobs.
 
 ## Final verification record
 
