@@ -21,8 +21,8 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 - Timestamp: 2026-08-11 16:50 -05:00 (America/Chicago)
 - Phase/stage: CEO presentation polish — bounded post-`ceo-demo-v1` pass
-- Status: REVIEWING — complete independent review and local verification passed; commit next
-- Progress: 95% of presentation polish
+- Status: ASSIGNED — presentation polish passed; existing-contract setup summary prepared
+- Progress: 5% of configuration summary
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -61,12 +61,15 @@ secret-adapter work outside a later explicitly accepted entry report.
 - CEO demo v1 final commit/tag: `4f4b1164b48eff8033242893463b5aa0dd1e9195`;
   [final CI run 31542423900](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31542423900)
   passed all seven jobs; local HEAD, remote `main`, and `ceo-demo-v1` matched at the clean gate.
-- Presentation-polish local evidence: 13 web tests and two independent 15-test browser
+- Presentation-polish evidence: 13 web tests and two independent 15-test browser
   rehearsals passed with zero skips; formatting, lint, strict types, production build,
   canonical start check, laptop/mobile visual review, and credential scans passed. Screenshot
   SHA-256: `f2a3d99b95d98d936bc1756ea5c92d8a292581deeca3436cae7e6cb7aeb22cb4`.
-- Next action: commit and push the focused presentation polish, require all seven CI jobs green,
-  then begin the separate existing-contract configuration-summary stage
+- Presentation commit: `b5e23660dfda88fbad11f5d43372cdeb5d90fe68`;
+  [CI run 31546385544](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31546385544)
+  passed all seven jobs; local and remote commits matched at the clean handoff.
+- Next action: commit this records/assignment baseline, require green CI, then Claude implements
+  the existing-contract read-only configuration summary
 - Product-owner action required: no
-- Last heartbeat: 2026-08-11 — presentation polish independently reviewed; two full real
-  browser rehearsals passed; preparing focused commit
+- Last heartbeat: 2026-08-11 — presentation polish passed all local and seven CI gates;
+  configuration-summary assignment prepared from existing APIs only
