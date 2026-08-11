@@ -23,7 +23,8 @@ test('adds a PostgreSQL source and completes a safe connection test', async ({ p
   await expect(page).toHaveURL(/\/app$/);
   await page.goto('/app/data-sources');
 
-  await page.getByLabel('Name', { exact: true }).fill(`Browser source ${randomUUID()}`);
+  const sourceName = `Browser source ${randomUUID()}`;
+  await page.getByLabel('Name', { exact: true }).fill(sourceName);
   await page.getByLabel('Host').fill(process.env.EIP_E2E_SOURCE_HOST ?? 'postgres');
   await page.getByLabel('Port').fill('5432');
   await page.getByLabel('Username').fill(process.env.EIP_E2E_SOURCE_USER ?? 'eip_app');
@@ -34,18 +35,14 @@ test('adds a PostgreSQL source and completes a safe connection test', async ({ p
 
   await expect(page.getByText('PostgreSQL source added.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Password')).toHaveValue('');
-  await page.getByRole('button', { name: 'Test connection' }).last().click();
-  await expect(page.getByText('Connection succeeded.')).toBeVisible({ timeout: 60_000 });
+  const sourceCard = page.locator('.source-card').filter({ hasText: sourceName });
+  await sourceCard.getByRole('button', { name: 'Test connection' }).click();
+  await expect(sourceCard.getByText('Connection succeeded.')).toBeVisible({ timeout: 60_000 });
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Disable source' }).last().click();
+  await sourceCard.getByRole('button', { name: 'Disable source' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Data source disabled.' })).toBeVisible();
-  await expect(
-    page
-      .locator('.source-card')
-      .last()
-      .getByText(/· disabled$/),
-  ).toBeVisible();
+  await expect(sourceCard.getByText(/· disabled$/)).toBeVisible();
 
   expect(page.url()).not.toContain(sentinel);
   expect(await page.content()).not.toContain(sentinel);
