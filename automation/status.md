@@ -20,9 +20,10 @@ secret-adapter work outside a later explicitly accepted entry report.
 ## Live handshake
 
 - Timestamp: 2026-08-11 16:50 -05:00 (America/Chicago)
-- Phase/stage: CEO demonstration Stage 3 of 4 — Executive Command Center browser experience
-- Status: PASSED — reviewed, verified, committed, pushed, and all seven CI jobs passed
-- Progress: 100% of Stage 3
+- Phase/stage: CEO demonstration Stage 4 of 4 — adversarial release and demonstration pack
+- Status: REVIEWING — complete local review and real-infrastructure verification passed;
+  focused commit is next
+- Progress: 95% of Stage 4
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -47,8 +48,16 @@ secret-adapter work outside a later explicitly accepted entry report.
   passed all seven jobs. Result: `automation/results/10_ceo_demo_executive_browser.md`.
 - Phase 2 final commit: `a1cf2c741875655cb88cb55c6758c19fa1988171`
 - Phase 2 final CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31321259794
-- Next action: commit and push this records-only Stage 3 closeout, require all seven CI jobs
-  green, confirm a clean repository, then begin the authorized Stage 4 release pack
+- Stage 3 records commit: `c7bab13a9dbb8506086705f1ea63912ec2c3cbe3`;
+  [CI run 31539850242](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31539850242)
+  passed all seven jobs; local and remote commits matched and the repository was clean.
+- Stage 4 local evidence: 395 PostgreSQL/API/security tests, 22 Redis/worker tests, two
+  independent 15-test browser rehearsals, and 11 web tests passed with zero skips. Migration
+  replay, empty ORM drift, strict Python/TypeScript checks, production build, OpenAPI,
+  repository-secret and service-log scans passed. Safe PNG SHA-256:
+  `fbbdb3666e6c9c2a9a75b3a3f62cb9cf2c66473f36407105a9f1e71f03ba7733`.
+- Next action: create and push the focused Stage 4 commit, require all seven CI jobs green,
+  finalize immutable evidence, and apply the one-time demo tag only after the final clean gate
 - Product-owner action required: no
-- Last heartbeat: 2026-08-11 16:50 -05:00 — Stage 3 implementation and measured mobile
-  repair passed local verification and all seven GitHub jobs; records-only closeout is next
+- Last heartbeat: 2026-08-11 17:22 -05:00 — Stage 4 independent review and every mandatory
+  local release gate passed with zero skips; preparing the focused commit

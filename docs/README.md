@@ -57,6 +57,17 @@ decision means writing a new ADR, not editing the old one
 | --- | --- | --- |
 | 21 | [Phase 1B Entry Tasks Report](21_PHASE_1B_ENTRY_REPORT.md) | The three conditions recorded at Phase 1A's closure: OIDC against a real identity provider, operator-driven tenant provisioning, and the first browser end-to-end security test. Commits, observed test results, migration evidence, unresolved risks, and the recommendation on beginning the first connector slice |
 
+## Phase 2 and CEO demonstration outputs
+
+| # | Document | What it covers |
+| --- | --- | --- |
+| 22 | [Phase 2 Data Source Manager Entry Report](22_PHASE_2_DATA_SOURCE_MANAGER_ENTRY_REPORT.md) | Authorized tenant-owned PostgreSQL source-management plan |
+| 23 | [Phase 2 Data Source Manager Completion Report](23_PHASE_2_DATA_SOURCE_MANAGER_COMPLETION_REPORT.md) | Delivered source-management security, retention, tests, and release evidence |
+| 24 | [Phase 2 Walkthrough](24_PHASE_2_THURSDAY_DEMO_SCRIPT.md) | Add Source and Test Connection demonstration path |
+| 25 | [CEO Demonstration Entry Report](25_CEO_DEMONSTRATION_VERTICAL_SLICE_ENTRY_REPORT.md) | Accepted bounded governed-evidence slice and exclusions |
+| 26 | [CEO Demonstration Walkthrough](26_CEO_DEMONSTRATION_WALKTHROUGH.md) | Deterministic setup/reset, executive walkthrough, proof, and safe fallback |
+| 27 | [CEO Demonstration Completion Report](27_CEO_DEMONSTRATION_COMPLETION_REPORT.md) | Immutable delivery evidence, final verification record, gaps, and release tag gate |
+
 ## Agent prompts
 
 | # | Document |
