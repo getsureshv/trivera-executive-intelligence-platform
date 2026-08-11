@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import uuid
 
+import eip.models  # noqa: F401  # isort: skip
 from eip.intelligence.seed import seed_demo
 from eip.platform.db import create_engines, create_session_factory
 from eip.platform.settings import get_settings

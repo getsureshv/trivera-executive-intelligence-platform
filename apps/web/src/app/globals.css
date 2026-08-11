@@ -371,6 +371,175 @@ button.secondary {
   color: var(--error);
 }
 
+/* --- executive evidence -------------------------------------------------- */
+.executive-page {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.executive-heading,
+.section-heading,
+.trust-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.executive-heading h1,
+.section-heading h2 {
+  margin: 0;
+}
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.demo-disclosure,
+.seeded-warning {
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  padding: 8px 12px;
+  font-weight: 650;
+}
+.executive-hero {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 28px;
+  padding: 28px;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #16233d, #285a77);
+  box-shadow: 0 18px 55px rgb(13 31 52 / 24%);
+}
+.metric-label,
+.metric-period {
+  margin: 0;
+  opacity: 0.8;
+}
+.metric-value {
+  margin: 6px 0;
+  font-size: clamp(2.6rem, 7vw, 5.2rem);
+  font-weight: 760;
+  letter-spacing: -0.06em;
+  line-height: 1;
+}
+.comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-content: center;
+}
+.comparison-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 8%);
+}
+.comparison-grid span,
+.comparison-grid small {
+  opacity: 0.78;
+}
+.comparison-grid strong {
+  font-size: 1.15rem;
+}
+.trust-strip {
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.86rem;
+}
+.seeded-warning {
+  margin: 0;
+  font-size: 0.88rem;
+}
+.executive-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  gap: 16px;
+}
+.slice-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.slice-card {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.slice-card h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.slice-card strong {
+  font-size: 1.15rem;
+}
+.slice-card span,
+.slice-card small {
+  color: var(--text-muted);
+}
+.attention-card {
+  border-top: 4px solid var(--warn);
+}
+.attention-card h2 {
+  font-size: 1.6rem;
+}
+.attention-card > p:not(.eyebrow) {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.attention-detail {
+  margin-top: 16px;
+}
+.trust-detail {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+  min-width: 0;
+}
+.lineage-path {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  gap: 6px;
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  overflow-x: auto;
+}
+.lineage-path li {
+  display: grid;
+  min-width: 145px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.lineage-path li:not(:last-child)::after {
+  content: '→';
+  position: relative;
+  left: calc(100% + 13px);
+  height: 0;
+  top: -28px;
+  color: var(--text-muted);
+}
+.lineage-path span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
 @media (max-width: 560px) {
   .app-main {
     padding: 16px;
@@ -381,5 +550,18 @@ button.secondary {
   table {
     display: block;
     overflow-x: auto;
+  }
+  .executive-hero,
+  .executive-grid {
+    grid-template-columns: 1fr;
+  }
+  .comparison-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .slice-list {
+    grid-template-columns: 1fr;
+  }
+  .metric-value {
+    font-size: 2.8rem;
   }
 }

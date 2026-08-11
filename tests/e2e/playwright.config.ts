@@ -22,6 +22,7 @@ const WEB_BASE_URL = process.env.EIP_WEB_BASE_URL ?? 'http://localhost:3000';
 
 export default defineConfig({
   testDir: './specs',
+  globalSetup: './support/prepare-executive-demo.ts',
   // Isolation is order-dependent in one direction only: a leaked session from
   // one test must not authenticate another. Serial execution plus a fresh
   // context per test makes that structural rather than hoped-for.

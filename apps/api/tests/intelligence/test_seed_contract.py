@@ -32,3 +32,11 @@ def test_demo_business_values_do_not_leak_into_production_source() -> None:
         if any(value in content for value in forbidden):
             offenders.append(str(path.relative_to(root)))
     assert offenders == []
+
+
+def test_standalone_seed_entrypoint_loads_complete_model_registry_first() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "src/eip/scripts/seed_executive_demo.py").read_text(encoding="utf-8")
+    registry_import = source.index("import eip.models")
+    seed_import = source.index("from eip.intelligence.seed import seed_demo")
+    assert registry_import < seed_import

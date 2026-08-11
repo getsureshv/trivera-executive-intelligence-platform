@@ -26,6 +26,8 @@ import type {
   DataSource,
   CreateDataSourceRequest,
   ConnectionTest,
+  GovernedMetricEnvelope,
+  LineageEnvelope,
 } from '@eip/contracts';
 
 import { ApiError } from './errors';
@@ -153,6 +155,33 @@ export function fetchConnectionTest(pollUrl: string): Promise<ConnectionTest> {
     throw new ApiError(400, null);
   }
   return request<ConnectionTest>(pollUrl);
+}
+
+export function fetchExecutiveDashboard(): Promise<GovernedMetricEnvelope> {
+  return request<GovernedMetricEnvelope>('/v1/dashboards/executive');
+}
+
+export function fetchGovernedMetric(
+  dashboard: GovernedMetricEnvelope,
+  groupBy: string,
+): Promise<GovernedMetricEnvelope> {
+  return request<GovernedMetricEnvelope>('/v1/metrics/revenue_ytd/query', {
+    method: 'POST',
+    body: {
+      period: {
+        kind: dashboard.period.kind,
+        timezone: dashboard.period.timezone,
+        as_of_at: dashboard.period.as_of_at,
+      },
+      group_by: groupBy,
+    },
+  });
+}
+
+export function fetchMetricLineage(configurationVersion: number): Promise<LineageEnvelope> {
+  return request<LineageEnvelope>(
+    `/v1/metrics/revenue_ytd/lineage?config_version=${encodeURIComponent(configurationVersion)}`,
+  );
 }
 
 export { API_BASE_URL, ApiError };

@@ -19,10 +19,10 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 ## Live handshake
 
-- Timestamp: 2026-08-09 23:36 -05:00 (America/Chicago)
-- Phase/stage: CEO demonstration Stage 2 of 4 — governed query and derived lineage backend
-- Status: PASSED — reviewed, verified, committed, pushed, and seven-job CI green
-- Progress: 100% of Stage 2
+- Timestamp: 2026-08-11 11:06 -05:00 (America/Chicago)
+- Phase/stage: CEO demonstration Stage 3 of 4 — Executive Command Center browser experience
+- Status: VERIFYING — complete independent review and all local gates passed; commit is next
+- Progress: 99% of Stage 3
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -37,10 +37,14 @@ secret-adapter work outside a later explicitly accepted entry report.
   approved generated-contract repair `1ff17964af2e028b70f9c8072b1e3f38bc036df8`;
   [CI run 31355693558](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31355693558)
   passed all seven jobs. Result: `automation/results/09_ceo_demo_governed_query_lineage.md`.
+  Stage 3 local evidence: real browser 15 passed, complete PostgreSQL/API 367 passed,
+  worker/Redis isolation 22 passed, and web unit 11 passed, all with zero skips; formatting,
+  lint, strict Python/TypeScript types, production build, leakage scans, responsive layout,
+  and diff integrity passed. Result: `automation/results/10_ceo_demo_executive_browser.md`.
 - Phase 2 final commit: `a1cf2c741875655cb88cb55c6758c19fa1988171`
 - Phase 2 final CI: https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31321259794
-- Next action: commit/push this records-only closeout, require seven-job CI green, verify a
-  clean repository, then begin CEO demonstration Stage 3
+- Next action: create and push the focused Stage 3 commit, require all seven CI jobs green,
+  record closeout, and confirm a clean repository before Stage 4
 - Product-owner action required: no
-- Last heartbeat: 2026-08-09 23:36 -05:00 — Stage 2 implementation and repair CI green;
-  preparing records-only closeout
+- Last heartbeat: 2026-08-11 11:06 -05:00 — all Stage 3 local review and real-infrastructure
+  gates passed with zero skips; preparing focused commit

@@ -1,10 +1,7 @@
 /**
  * Root layout — the application shell.
  *
- * Phase 1A is a shell only: no dashboards, no charts, no KPI components, no
- * source-configuration screens. Those belong to later phases and building them
- * now would be guessing at an experience the semantic and metric layers do not
- * yet support.
+ * Shared application shell for authenticated governed experiences.
  */
 
 import type { Metadata, Viewport } from 'next';
@@ -13,7 +10,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'TriVera Executive Intelligence Platform',
-  description: 'Phase 1A — platform skeleton',
+  description: 'Governed executive intelligence and source management',
   robots: { index: false, follow: false },
 };
 
@@ -44,10 +41,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <header className="app-header">
             <div className="app-brand">
               <strong>TriVera Executive Intelligence Platform</strong>
-              <span>Phase 1A · platform skeleton</span>
+              <span>Governed executive evidence</span>
             </div>
             <nav aria-label="Primary">
               <a href="/app">Overview</a>
+              {' · '}
+              <a href="/app/executive">Executive</a>
               {' · '}
               <a href="/app/data-sources">Data sources</a>
             </nav>
@@ -56,8 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="app-main">{children}</main>
 
           <footer className="app-footer">
-            Environment: <code>{environment}</code> · No business intelligence functionality is
-            present in this phase.
+            Environment: <code>{environment}</code> · Governed evidence, tenant scoped.
           </footer>
         </div>
       </body>
