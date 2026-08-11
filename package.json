@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @eip/web dev",
+    "demo:start": "node scripts/start-demo.mjs",
     "build": "pnpm --filter @eip/web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",

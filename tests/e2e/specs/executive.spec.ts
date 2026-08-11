@@ -83,7 +83,11 @@ test('dashboard opens attention and one-click trust using governed API evidence'
   await expect(page.locator('.metric-value')).toContainText(
     evidence.metric.value.replace(/\B(?=(\d{3})+(?!\d))/g, ','),
   );
-  await expect(page.getByText(evidence.metric.provenance.origin_label).first()).toBeVisible();
+  await expect(
+    page.getByText(evidence.metric.provenance.origin_label, { exact: true }),
+  ).toHaveCount(1);
+  await expect(page.getByText('Progress to target', { exact: true })).toBeVisible();
+  await expect(page.getByText('Prior year', { exact: true })).toBeVisible();
   const drillDown = page.locator('.executive-drilldown');
   for (const slice of evidence.metric.drill_down) {
     await expect(drillDown.getByRole('heading', { name: slice.label })).toBeVisible();
@@ -99,14 +103,18 @@ test('dashboard opens attention and one-click trust using governed API evidence'
   await expect(
     attention.getByRole('heading', { name: evidence.metric.attention.label }),
   ).toBeVisible();
+  await expect(attention.getByText(/configured target\.$/)).toBeVisible();
   await page.getByRole('button', { name: `Go to ${evidence.metric.attention.label}` }).click();
   await expect(
     page.locator(`#segment-${evidence.metric.attention.dimension_value_id}`),
   ).toBeFocused();
   await page.getByRole('button', { name: 'View attention details' }).click();
-  await expect(
-    page.getByText(evidence.metric.attention.target_variance, { exact: true }),
-  ).toBeVisible();
+  const formattedAttentionVariance = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: evidence.metric.unit,
+    maximumFractionDigits: 0,
+  }).format(BigInt(evidence.metric.attention.target_variance));
+  await expect(page.getByText(formattedAttentionVariance, { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Open trust view' }).click();
   const lineagePath = page.getByRole('list', { name: 'Derived lineage path' });
   await expect(lineagePath).toBeVisible();

@@ -37,6 +37,17 @@ The Playwright global setup performs steps 4–5 through the public tenant API p
 container command. A rehearsal therefore cannot accidentally use an untested or unrelated
 source.
 
+Build the web application, then use the canonical local presentation command:
+
+```sh
+pnpm --filter @eip/web build
+pnpm demo:start
+```
+
+Open **http://localhost:3100/sign-in**. The command uses the dedicated demo port and reports
+ready only after the response contains the TriVera application identity; an unrelated HTTP
+server cannot satisfy the check. It never searches for or terminates another process.
+
 ## Ten-minute CEO path
 
 1. **Add PostgreSQL Source.** Show that the credential field clears after submission and no
@@ -44,9 +55,9 @@ source.
    security are enforced beneath the API.
 2. **Test Connection.** Run the test and show **Connection succeeded**. This is real selected-
    source connection-health evidence.
-3. **Open Executive.** Open **Executive** and orient on Revenue YTD, its calendar-YTD period,
-   as-of time, prior comparison, target variance, freshness, quality, and accountable-owner
-   role.
+3. **Open Executive.** Open **Executive** and orient on Revenue YTD, its readable calendar-YTD
+   period and as-of time, prior comparison, target progress and variance, freshness, quality,
+   and accountable-owner role.
 4. **State the data boundary.** Point to **Demo dataset / seeded demonstration data** and the
    statement that observations were not live extracted. Do not describe the values as
    customer data or live analytics.
@@ -81,4 +92,3 @@ source.
   contain authorization or cookie material. The approved fallback is a credential-scanned
   PNG of the Executive page plus the text evidence report. Capture it only after the full
   sentinel scan passes, and save it as `docs/evidence/ceo-demo-executive.png`.
-

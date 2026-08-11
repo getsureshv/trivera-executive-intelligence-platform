@@ -37,7 +37,7 @@ export function SignInForm() {
           type="email"
           autoComplete="off"
           required
-          placeholder="ada@acme.invalid"
+          defaultValue="ada@acme.invalid"
         />
       </div>
 

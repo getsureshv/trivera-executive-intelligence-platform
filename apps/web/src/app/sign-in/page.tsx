@@ -28,12 +28,13 @@ export default function SignInPage() {
   }
 
   return (
-    <section className="card">
-      <h2>Development sign-in</h2>
+    <section className="card demo-sign-in">
+      <p className="eyebrow">Local demonstration only</p>
+      <h2>Enter the CEO demo</h2>
       <p className="card-hint">
-        No password is requested because the platform never stores one. This form mints a
-        short-lived development token for a seeded identity; in every other environment
-        authentication is delegated to the organization&rsquo;s OIDC provider.
+        Continue as the seeded Acme executive identity. No password is used: this local-only path
+        mints a short-lived token and still verifies organization membership. Production
+        authentication remains delegated to the organization&rsquo;s OIDC provider.
       </p>
       <SignInForm />
     </section>

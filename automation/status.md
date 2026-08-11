@@ -20,9 +20,9 @@ secret-adapter work outside a later explicitly accepted entry report.
 ## Live handshake
 
 - Timestamp: 2026-08-11 16:50 -05:00 (America/Chicago)
-- Phase/stage: CEO demonstration Stage 4 of 4 — adversarial release and demonstration pack
-- Status: VERIFYING — release-pack CI passed; final records-only CI and immutable tag remain
-- Progress: 99% of Stage 4
+- Phase/stage: CEO presentation polish — bounded post-`ceo-demo-v1` pass
+- Status: REVIEWING — complete independent review and local verification passed; commit next
+- Progress: 95% of presentation polish
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -58,8 +58,15 @@ secret-adapter work outside a later explicitly accepted entry report.
 - Stage 4 release-pack commit: `daafd4a9e4d2f6cc5685f07bf320318e137fbf71`;
   [CI run 31542045230](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31542045230)
   passed all seven jobs.
-- Next action: commit and push this records-only closeout, require all seven CI jobs green,
-  then create and push `ceo-demo-v1` on that exact commit and prove a clean local/remote match
+- CEO demo v1 final commit/tag: `4f4b1164b48eff8033242893463b5aa0dd1e9195`;
+  [final CI run 31542423900](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31542423900)
+  passed all seven jobs; local HEAD, remote `main`, and `ceo-demo-v1` matched at the clean gate.
+- Presentation-polish local evidence: 13 web tests and two independent 15-test browser
+  rehearsals passed with zero skips; formatting, lint, strict types, production build,
+  canonical start check, laptop/mobile visual review, and credential scans passed. Screenshot
+  SHA-256: `f2a3d99b95d98d936bc1756ea5c92d8a292581deeca3436cae7e6cb7aeb22cb4`.
+- Next action: commit and push the focused presentation polish, require all seven CI jobs green,
+  then begin the separate existing-contract configuration-summary stage
 - Product-owner action required: no
-- Last heartbeat: 2026-08-11 17:31 -05:00 — Stage 4 release-pack commit passed all seven CI
-  jobs; preparing the final records-only commit and immutable tag gate
+- Last heartbeat: 2026-08-11 — presentation polish independently reviewed; two full real
+  browser rehearsals passed; preparing focused commit

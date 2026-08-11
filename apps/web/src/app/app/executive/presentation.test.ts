@@ -4,10 +4,16 @@ import test from 'node:test';
 import type { GovernedMetricEnvelope } from '@eip/contracts';
 
 import {
+  attentionReason,
   formatComparison,
+  formatDate,
+  formatDateTime,
   formatMetricValue,
+  formatSignedMetricValue,
+  formatSignedPercent,
   readableMachineLabel,
   reconciles,
+  targetProgress,
 } from './presentation.ts';
 
 function metric(values: string[], headline: string): GovernedMetricEnvelope {
@@ -77,9 +83,33 @@ test('reconciles exact decimal strings without binary floating point', () => {
 
 test('renders API comparison and machine disclosures deterministically', () => {
   assert.equal(formatComparison({ absolute: '-2', percent: '-4.5' }), '-2 (-4.5%)');
+  assert.equal(formatSignedPercent('4.5'), '+4.5%');
+  assert.equal(formatSignedPercent('5.791457286432160804020100503'), '+5.8%');
+  assert.equal(formatSignedPercent('-6.433333333333333333333333333'), '-6.4%');
+  assert.equal(formatSignedMetricValue('2', metric([], '0')), '+$2');
   assert.equal(
     readableMachineLabel('selected_source_connection_health_only'),
     'selected source connection health only',
+  );
+});
+
+test('formats executive dates and exact target progress for presentation', () => {
+  assert.equal(formatDate('2026-01-01', 'America/Chicago'), 'Jan 1, 2026');
+  assert.match(
+    formatDateTime('2026-08-11T17:00:00-05:00', 'America/Chicago'),
+    /^Aug 11, 2026, 5:00 PM CDT$/,
+  );
+  assert.equal(targetProgress('4250000', '4500000'), 94.4);
+  assert.equal(targetProgress('4210500', '4500000'), 93.6);
+  assert.equal(targetProgress('5000000', '4500000'), 100);
+  assert.equal(targetProgress('-1', '4500000'), 0);
+  assert.equal(targetProgress('1', '0'), null);
+});
+
+test('derives attention reasoning only from governed values', () => {
+  assert.equal(
+    attentionReason('Technology', '-250000', metric([], '0')),
+    'Technology is $250,000 below its configured target.',
   );
 });
 

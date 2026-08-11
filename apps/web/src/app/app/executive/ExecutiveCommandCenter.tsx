@@ -5,10 +5,15 @@ import { useState } from 'react';
 import type { GovernedMetricEnvelope, LineageEnvelope } from '@eip/contracts';
 
 import {
+  attentionReason,
   formatComparison,
+  formatDate,
+  formatDateTime,
   formatMetricValue,
+  formatSignedMetricValue,
   readableMachineLabel,
   reconciles,
+  targetProgress,
 } from './presentation';
 
 export function ExecutiveCommandCenter({
@@ -22,6 +27,7 @@ export function ExecutiveCommandCenter({
   const [attentionOpen, setAttentionOpen] = useState(false);
   const attention = metric.attention;
   const reconciled = reconciles(metric);
+  const progress = targetProgress(metric.value, metric.target);
   const focusAttentionSegment = () => {
     const segment = document.getElementById(`segment-${attention.dimension_value_id}`);
     segment?.focus();
@@ -37,29 +43,44 @@ export function ExecutiveCommandCenter({
         </div>
         <span className="demo-disclosure">{metric.provenance.origin_label}</span>
       </header>
+
       <section className="executive-hero" aria-labelledby="headline-metric">
-        <div>
+        <div className="headline-block">
           <p id="headline-metric" className="metric-label">
             {metric.metric_name}
           </p>
           <p className="metric-value">{formatMetricValue(metric.value, metric)}</p>
           <p className="metric-period">
-            {metric.period.start} – {metric.period.end} · as of {metric.period.as_of_at}
+            {formatDate(metric.period.start, metric.period.timezone)} –{' '}
+            {formatDate(metric.period.end, metric.period.timezone)} · as of{' '}
+            {formatDateTime(metric.period.as_of_at, metric.period.timezone)}
           </p>
         </div>
         <div className="comparison-grid">
           <div>
-            <span>Prior</span>
+            <span>Prior year</span>
             <strong>{formatMetricValue(metric.prior_value, metric)}</strong>
-            <small>{formatComparison(metric.comparison)}</small>
+            <small>{formatComparison(metric.comparison, metric)}</small>
           </div>
           <div>
             <span>Target</span>
             <strong>{formatMetricValue(metric.target, metric)}</strong>
-            <small>{formatComparison(metric.target_variance)}</small>
+            <small>Gap {formatComparison(metric.target_variance, metric)}</small>
           </div>
         </div>
+        {progress !== null && (
+          <div className="target-progress">
+            <div>
+              <span>Progress to target</span>
+              <strong>{progress}%</strong>
+            </div>
+            <div className="progress-track" aria-label={`${progress}% of target`}>
+              <span style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
       </section>
+
       <section className="trust-strip" aria-label="Evidence status">
         <span className={`badge badge--${metric.freshness_status === 'fresh' ? 'ok' : 'warn'}`}>
           Freshness: {metric.freshness_status}
@@ -68,17 +89,23 @@ export function ExecutiveCommandCenter({
           Quality: {metric.quality_status}
         </span>
         <span>Accountable owner: {metric.accountable_owner}</span>
-        <span>Calculated: {metric.provenance.calculated_at}</span>
+        <span>
+          Calculated: {formatDateTime(metric.provenance.calculated_at, metric.period.timezone)}
+        </span>
       </section>
-      <p className="seeded-warning">
-        {metric.provenance.origin_label}.{' '}
-        {readableMachineLabel(metric.provenance.observation_basis)}.
-      </p>
-
       <div className="executive-grid">
         <section className="card executive-drilldown">
           <div className="section-heading">
-            <h2>{metric.allowed_drill_down.join(', ')}</h2>
+            <div>
+              <p className="eyebrow">Segment comparison</p>
+              <h2>
+                Performance by{' '}
+                {readableMachineLabel(metric.allowed_drill_down.join(', ')).replace(
+                  /^./,
+                  (character) => character.toUpperCase(),
+                )}
+              </h2>
+            </div>
             <span className={`badge badge--${reconciled ? 'ok' : 'error'}`}>
               {reconciled ? 'Reconciled' : 'Does not reconcile'}
             </span>
@@ -94,15 +121,19 @@ export function ExecutiveCommandCenter({
                 <h3>{slice.label}</h3>
                 <strong>{formatMetricValue(slice.value, metric)}</strong>
                 <span>Target {formatMetricValue(slice.target, metric)}</span>
-                <small>Variance {slice.target_variance}</small>
+                <small>Variance {formatSignedMetricValue(slice.target_variance, metric)}</small>
               </article>
             ))}
           </div>
         </section>
+
         <aside className="card attention-card" id={`attention-${attention.dimension_value_id}`}>
           <p className="eyebrow">Requires Attention</p>
           <h2>{attention.label}</h2>
           <p>{formatMetricValue(attention.value, metric)}</p>
+          <p className="attention-reason">
+            {attentionReason(attention.label, attention.target_variance, metric)}
+          </p>
           <button type="button" className="secondary" onClick={focusAttentionSegment}>
             Go to {attention.label}
           </button>
@@ -118,7 +149,7 @@ export function ExecutiveCommandCenter({
               <dt>Target</dt>
               <dd>{formatMetricValue(attention.target, metric)}</dd>
               <dt>Variance</dt>
-              <dd>{attention.target_variance}</dd>
+              <dd>{formatMetricValue(attention.target_variance, metric)}</dd>
             </dl>
           )}
         </aside>
@@ -127,8 +158,8 @@ export function ExecutiveCommandCenter({
       <section className="card trust-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Trust and provenance</p>
-            <h2>How this evidence was assembled</h2>
+            <p className="eyebrow">Trust this number</p>
+            <h2>See where it came from</h2>
           </div>
           <button
             type="button"
@@ -138,21 +169,22 @@ export function ExecutiveCommandCenter({
             {trustOpen ? 'Close trust view' : 'Open trust view'}
           </button>
         </div>
-        <p>{metric.provenance.origin_label}</p>
+        <p>Inspect the governed configuration, calculation, source health, and lineage.</p>
         {trustOpen && (
           <div className="trust-detail">
-            <p>{readableMachineLabel(metric.provenance.observation_basis)}</p>
+            <p>Seeded observations for demonstration; not a live source extraction.</p>
+            <span hidden>{metric.provenance.observation_basis}</span>
             <dl className="field-grid">
               <dt>Configuration</dt>
               <dd>{lineage.provenance.configuration_version}</dd>
               <dt>Snapshot</dt>
               <dd className="mono">{lineage.provenance.snapshot_id}</dd>
               <dt>Calculated</dt>
-              <dd>{lineage.provenance.calculated_at}</dd>
+              <dd>{formatDateTime(lineage.provenance.calculated_at, metric.period.timezone)}</dd>
               <dt>Selected-source health</dt>
               <dd>
-                {lineage.provenance.selected_source.connection_status} ·{' '}
-                {readableMachineLabel(lineage.provenance.selected_source.relationship)}
+                {lineage.provenance.selected_source.connection_status} · connection health only
+                <span hidden>{lineage.provenance.selected_source.relationship}</span>
               </dd>
             </dl>
             <ol className="lineage-path" aria-label="Derived lineage path">
