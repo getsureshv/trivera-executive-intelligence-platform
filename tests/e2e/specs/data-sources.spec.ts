@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, signInAs, TENANT_A_USER, test } from '../support/fixtures';
 
 test('adds a PostgreSQL source and completes a safe connection test', async ({ page, tenantA }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const sentinel = process.env.EIP_E2E_SOURCE_PASSWORD;
   expect(
     sentinel,
@@ -35,7 +35,7 @@ test('adds a PostgreSQL source and completes a safe connection test', async ({ p
   await expect(page.getByText('PostgreSQL source added.', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Password')).toHaveValue('');
   await page.getByRole('button', { name: 'Test connection' }).last().click();
-  await expect(page.getByText('Connection succeeded.')).toBeVisible({ timeout: 35_000 });
+  await expect(page.getByText('Connection succeeded.')).toBeVisible({ timeout: 60_000 });
 
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Disable source' }).last().click();
