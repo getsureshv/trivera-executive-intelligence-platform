@@ -541,6 +541,9 @@ button.secondary {
 }
 
 @media (max-width: 560px) {
+  .executive-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .app-main {
     padding: 16px;
   }
@@ -551,12 +554,20 @@ button.secondary {
     display: block;
     overflow-x: auto;
   }
-  .executive-hero,
   .executive-grid {
     grid-template-columns: 1fr;
   }
+  .executive-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .comparison-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .comparison-grid > div {
+    min-width: 0;
+  }
+  .comparison-grid small {
+    overflow-wrap: anywhere;
   }
   .slice-list {
     grid-template-columns: 1fr;
