@@ -1,7 +1,7 @@
 # CEO demonstration Stage 3 result — Executive Command Center browser experience
 
 Date: 2026-08-11
-Result: **PASSED LOCALLY — awaiting commit and CI**
+Result: **PASSED**
 
 ## Delivered
 
@@ -42,5 +42,15 @@ contract, production authorization, or source-query behavior changed.
   trust interactions, forged-tenant denial, session-token isolation, safe diagnostics, and
   credential scans across API JSON, response bodies, URL, HTML, storage, and screenshots.
 
-Commit, push, seven-job GitHub Actions, and clean-repository evidence are added only after
-those gates complete.
+## Delivery evidence
+
+- Stage 3 implementation commit: `53fca7fc36c236a68545448c8af14138c7325256`.
+- Measured mobile containment repair commit: `8993ba323310a1268645ed37a54c364a88281f5c`.
+- The final repair was derived from a 390-pixel browser measurement: the 343-pixel
+  `.executive-page` had an unconstrained 1,173-pixel grid track. The parent and nested
+  comparison tracks are now allowed to shrink without hiding content.
+- Rebuilt real Chromium verification after the repair: 1 passed and 0 skipped.
+- [GitHub Actions run 31539512265](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31539512265)
+  passed all seven jobs, including the complete browser tenant-isolation suite.
+- The final implementation diff was independently inspected and contained only mobile CSS;
+  it changed no product behavior, security policy, API, migration, or stored data.
