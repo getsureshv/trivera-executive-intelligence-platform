@@ -129,8 +129,25 @@ test('configuration summary is contained at 390 pixels', async ({ page, tenantA 
   await page.waitForURL('**/app');
   await page.goto('/app/setup');
   await expect(page.getByRole('link', { name: 'Preview Executive Dashboard' })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
+  const containment = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    offenders: Array.from(document.querySelectorAll<HTMLElement>('body *'))
+      .map((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          tag: element.tagName,
+          className: element.className,
+          text: (element.textContent ?? '').trim().slice(0, 120),
+          left: bounds.left,
+          right: bounds.right,
+          width: bounds.width,
+        };
+      })
+      .filter(({ left, right }) => left < -1 || right > window.innerWidth + 1),
+  }));
+  expect(containment.documentWidth, JSON.stringify(containment, null, 2)).toBeLessThanOrEqual(
+    containment.viewportWidth,
   );
 });
 
