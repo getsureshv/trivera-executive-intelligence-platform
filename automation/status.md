@@ -19,10 +19,10 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 ## Live handshake
 
-- Timestamp: 2026-08-11 16:50 -05:00 (America/Chicago)
-- Phase/stage: CEO presentation polish — bounded post-`ceo-demo-v1` pass
-- Status: ASSIGNED — presentation polish passed; existing-contract setup summary prepared
-- Progress: 5% of configuration summary
+- Timestamp: 2026-08-12 00:35 -05:00 (America/Chicago)
+- Phase/stage: CEO presentation polish — existing-contract configuration summary
+- Status: VERIFYING — implementation and two real browser rehearsals passed; commit/CI pending
+- Progress: 96% of final delivery
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -68,8 +68,13 @@ secret-adapter work outside a later explicitly accepted entry report.
 - Presentation commit: `b5e23660dfda88fbad11f5d43372cdeb5d90fe68`;
   [CI run 31546385544](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31546385544)
   passed all seven jobs; local and remote commits matched at the clean handoff.
-- Next action: commit this records/assignment baseline, require green CI, then Claude implements
-  the existing-contract read-only configuration summary
+- Configuration-summary evidence: 16 web tests and two independent 18-test complete browser
+  rehearsals passed with zero skips. Formatting, lint, strict TypeScript, production build,
+  PostgreSQL/Redis/worker execution, tenant isolation, forged-tenant denial, leakage scans, laptop
+  review, and 390-pixel containment passed. Result:
+  `automation/results/13_ceo_demo_configuration_summary.md`.
+- Next action: commit and push the focused UI stage, require all seven CI jobs green, then create the
+  records-only closeout and immutable `ceo-demo-v2` tag from a clean green commit
 - Product-owner action required: no
-- Last heartbeat: 2026-08-11 — presentation polish passed all local and seven CI gates;
-  configuration-summary assignment prepared from existing APIs only
+- Last heartbeat: 2026-08-12 — configuration summary passed complete independent local and real
+  browser verification; focused commit is next

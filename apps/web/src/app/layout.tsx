@@ -48,6 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {' · '}
               <a href="/app/executive">Executive</a>
               {' · '}
+              <a href="/app/setup">Configuration</a>
+              {' · '}
               <a href="/app/data-sources">Data sources</a>
             </nav>
           </header>

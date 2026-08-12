@@ -55,17 +55,23 @@ server cannot satisfy the check. It never searches for or terminates another pro
    security are enforced beneath the API.
 2. **Test Connection.** Run the test and show **Connection succeeded**. This is real selected-
    source connection-health evidence.
-3. **Open Executive.** Open **Executive** and orient on Revenue YTD, its readable calendar-YTD
+3. **Review Configuration.** Open **Configuration** and show the tenant-derived company name,
+   calendar/timezone, selected PostgreSQL source and latest real health, governed metric,
+   configured segment, owner, dashboard placement, and configuration version. Explain that
+   **Published for executive use** is inferred from successful delivery through the
+   published-only dashboard API, not returned as a raw status field. This read-only summary is
+   available now; a full self-service builder is a future phase.
+4. **Open Executive.** Select **Preview Executive Dashboard** and orient on Revenue YTD, its readable calendar-YTD
    period and as-of time, prior comparison, target progress and variance, freshness, quality,
    and accountable-owner role.
-4. **State the data boundary.** Point to **Demo dataset / seeded demonstration data** and the
+5. **State the data boundary.** Point to **Demo dataset / seeded demonstration data** and the
    statement that observations were not live extracted. Do not describe the values as
    customer data or live analytics.
-5. **Drill down.** Show the configured segment breakdown and the **Reconciled** result. The
+6. **Drill down.** Show the configured segment breakdown and the **Reconciled** result. The
    displayed segment values sum exactly to the headline using decimal arithmetic.
-6. **Requires Attention.** Use the attention control. It moves to the API-selected segment;
+7. **Requires Attention.** Use the attention control. It moves to the API-selected segment;
    the selection follows the persisted largest-negative-target-variance rule.
-7. **One-click trust.** Open the trust view. Show configuration version, snapshot, calculation
+8. **One-click trust.** Open the trust view. Show configuration version, snapshot, calculation
    time, source-health-only relationship, and request-derived lineage from the experience to
    governed metric, semantic binding, dataset, and selected source.
 
@@ -90,5 +96,7 @@ server cannot satisfy the check. It never searches for or terminates another pro
   successful result.
 - Traces, video, HAR, and persisted browser session state remain disabled because they can
   contain authorization or cookie material. The approved fallback is a credential-scanned
-  PNG of the Executive page plus the text evidence report. Capture it only after the full
-  sentinel scan passes, and save it as `docs/evidence/ceo-demo-executive.png`.
+  PNG of the Configuration summary and Executive page plus the text evidence report. Capture
+  them only after the full sentinel scan passes, and save the refreshed executive image as
+  `docs/evidence/ceo-demo-executive.png` and the summary as
+  `docs/evidence/ceo-demo-configuration.png`.

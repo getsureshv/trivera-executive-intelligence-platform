@@ -157,6 +157,12 @@ export function fetchConnectionTest(pollUrl: string): Promise<ConnectionTest> {
   return request<ConnectionTest>(pollUrl);
 }
 
+export function fetchLatestConnectionTest(sourceId: string): Promise<ConnectionTest> {
+  return request<ConnectionTest>(
+    `/v1/data-sources/${encodeURIComponent(sourceId)}/connection-tests/latest`,
+  );
+}
+
 export function fetchExecutiveDashboard(): Promise<GovernedMetricEnvelope> {
   return request<GovernedMetricEnvelope>('/v1/dashboards/executive');
 }
