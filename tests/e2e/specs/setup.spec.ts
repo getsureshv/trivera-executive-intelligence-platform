@@ -142,9 +142,14 @@ test('configuration summary is contained at 390 pixels', async ({ page, tenantA 
           left: bounds.left,
           right: bounds.right,
           width: bounds.width,
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
         };
       })
-      .filter(({ left, right }) => left < -1 || right > window.innerWidth + 1),
+      .filter(
+        ({ left, right, clientWidth, scrollWidth }) =>
+          left < -1 || right > window.innerWidth + 1 || scrollWidth > clientWidth + 1,
+      ),
   }));
   expect(containment.documentWidth, JSON.stringify(containment, null, 2)).toBeLessThanOrEqual(
     containment.viewportWidth,
