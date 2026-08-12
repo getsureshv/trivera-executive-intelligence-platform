@@ -1,6 +1,7 @@
 # CEO demo configuration summary result
 
-Status: implementation verified locally; commit and CI pending.
+Status: passed — implementation, measured portability repair, local verification, push, and all
+seven GitHub Actions jobs completed successfully.
 
 ## Delivered
 
@@ -39,7 +40,11 @@ governed value, seeded observation, or production authentication behavior change
 
 ## Delivery handshake
 
-- Implementation commit: pending
-- GitHub Actions: pending; all seven jobs are required
-- Records closeout: pending
+- Implementation commit: `3c1b9f25ea28266cd0f4d5c875c420259df41a09`
+- Diagnostic commits: `f656651a9cab50a8182e5ec73dc031d7971ef76e` and
+  `9daf4ca9c41d4b099c1d16c6063cd12d56263b8c`
+- Measured CSS repair: `1622c0612d7b5986e0511a2365a78264f8f5ee98`
+- GitHub Actions: [run 31607701090](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31607701090)
+  passed all seven jobs, including Linux browser containment at 390 pixels.
+- Records closeout: this records-only commit; hash and CI are recorded by the immutable tag gate
 - Immutable tag: `ceo-demo-v2`, pending all green gates and a clean repository

@@ -19,10 +19,10 @@ secret-adapter work outside a later explicitly accepted entry report.
 
 ## Live handshake
 
-- Timestamp: 2026-08-12 00:35 -05:00 (America/Chicago)
+- Timestamp: 2026-08-12 09:40 -05:00 (America/Chicago)
 - Phase/stage: CEO presentation polish — existing-contract configuration summary
-- Status: VERIFYING — implementation and two real browser rehearsals passed; commit/CI pending
-- Progress: 96% of final delivery
+- Status: PASSED — implementation and measured mobile repair passed; records/tag gate pending
+- Progress: 99% of final delivery
 - Owner: Codex
 - Evidence: all 3 focused PostgreSQL tests, 391 full real-PG tests, and 23 final focused tests
   passed with zero skips; migration replay and empty model drift passed; Ruff, strict mypy,
@@ -73,8 +73,12 @@ secret-adapter work outside a later explicitly accepted entry report.
   PostgreSQL/Redis/worker execution, tenant isolation, forged-tenant denial, leakage scans, laptop
   review, and 390-pixel containment passed. Result:
   `automation/results/13_ceo_demo_configuration_summary.md`.
-- Next action: commit and push the focused UI stage, require all seven CI jobs green, then create the
-  records-only closeout and immutable `ceo-demo-v2` tag from a clean green commit
+- Configuration-summary commit: `3c1b9f25ea28266cd0f4d5c875c420259df41a09`;
+  measured mobile repair: `1622c0612d7b5986e0511a2365a78264f8f5ee98`;
+  [CI run 31607701090](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31607701090)
+  passed all seven jobs.
+- Next action: commit and push this records-only closeout, require all seven CI jobs green, then
+  create immutable `ceo-demo-v2` from the clean final commit
 - Product-owner action required: no
-- Last heartbeat: 2026-08-12 — configuration summary passed complete independent local and real
-  browser verification; focused commit is next
+- Last heartbeat: 2026-08-12 — configuration summary and measured Linux mobile repair passed all
+  local and seven CI gates; records-only closeout is next

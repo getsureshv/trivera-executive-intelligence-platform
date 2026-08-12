@@ -92,3 +92,32 @@ reviewed, all mandatory local checks and both rehearsals pass with zero skips, t
 pushed, and all seven GitHub Actions jobs are green. Tag that exact verified commit, push the
 tag once, and confirm local `HEAD`, remote `main`, and the tag resolve to the same hash. Never
 move or reuse the tag.
+
+## `ceo-demo-v2` presentation and configuration-summary addendum
+
+The presentation-polish release adds a canonical local demo start, a CEO-readable Executive
+Command Center, and an authenticated read-only **Configured for Acme Industrial** summary. The
+summary is metadata-driven from existing tenant-scoped APIs and shows the reporting calendar,
+selected PostgreSQL source and real current-version connection health, governed metric and version,
+target and comparison, configured segment, accountable owner, dashboard placement, and
+configuration version. It does not add or imply a generic authoring builder; full self-service
+configuration remains a future phase.
+
+Codex independently verified 16 web tests and two complete 18-test browser rehearsals with zero
+skips. Both rehearsals exercised PostgreSQL, Redis, the background worker, tenant isolation,
+forged-tenant refusal, credential leakage scans, the executive path, the configuration summary,
+and 390-pixel containment. Linux CI exposed an underscore-heavy source name that could not wrap;
+the measured repair added containment only to setup-card headings. Commit
+`1622c0612d7b5986e0511a2365a78264f8f5ee98` passed all seven jobs in
+[CI run 31607701090](https://github.com/getsureshv/trivera-executive-intelligence-platform/actions/runs/31607701090).
+
+The refreshed credential-scanned screenshots are:
+
+- `docs/evidence/ceo-demo-configuration.png`, SHA-256
+  `53981098f5e7aba0407a6da1675a66a571587bab5c80a277445ee4b17b138253`;
+- `docs/evidence/ceo-demo-executive.png`, SHA-256
+  `f8c3de9e4bb5063938df9c8662c66e7a91f27a1f7bc3e2a12a2b40245e3a72cc`.
+
+The seeded-data truth boundary and all production gaps above remain unchanged. The new immutable
+tag is `ceo-demo-v2`; create and push it only after this records-only addendum passes all seven CI
+jobs and local `HEAD`, remote `main`, and the repository-clean check agree.
