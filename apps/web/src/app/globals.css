@@ -605,6 +605,7 @@ button.secondary {
 .setup-card h2 {
   font-size: 1.25rem;
   margin-bottom: 16px;
+  overflow-wrap: anywhere;
 }
 .inference-note {
   display: block;
